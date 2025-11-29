@@ -46,6 +46,16 @@ async def query_rag(request: RAGQueryRequest):
         RAGResponse with LLM-generated answer and source documents
     """
     try:
+        # Validate query is not too short
+        if len(request.query.strip()) < 3:
+            return RAGResponse(
+                success=False,
+                query=request.query,
+                llm_answer="Please enter a more specific question (at least 3 characters) about EU regulations.",
+                source_documents=[],
+                metadata={"error": "Query too short"}
+            )
+        
         logger.info(f"Processing RAG query: {request.query}")
         
         # Initialize RAG service

@@ -107,7 +107,14 @@ class RAGService:
             Always base your answers on the provided context from regulatory documents.
             If information is not in the provided context, clearly state that.
             Provide structured, well-organized responses that are easy to understand.
-            Format your response in clear paragraphs and sections without emojis or unnecessary formatting."""
+            Format your response in clear paragraphs and sections without emojis or unnecessary formatting.
+            
+            IMPORTANT: At the end of your response, always include a "Resources" section that lists the source documents you referenced. Format it as:
+            
+            **Resources:**
+            - [Document Name/Title]
+            
+            Include only the sources you actually used to answer the question."""
             
             response = self.openai_client.chat.completions.create(
                 model=self.llm_model,

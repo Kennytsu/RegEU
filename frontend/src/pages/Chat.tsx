@@ -53,7 +53,17 @@ export default function Chat() {
   // Auto-select first session if none is selected
   useEffect(() => {
     if (!currentSessionId && sessions.length > 0) {
-      setCurrentSessionId(sessions[0].id);
+      const firstSession = sessions[0];
+      setCurrentSessionId(firstSession.id);
+      
+      // Check if session has the greeting message
+      if (messages.length === 0) {
+        addMessage.mutate({
+          sessionId: firstSession.id,
+          content: "Hello! I'm your AI regulatory assistant. What would you like to know about EU regulations?",
+          author: "assistant",
+        });
+      }
     }
   }, [sessions, currentSessionId]);
 
@@ -96,26 +106,8 @@ export default function Chat() {
     const messageText = text || input;
     if (!messageText.trim() || isLoading) return;
 
-    // Create a new session if none exists
-    if (!currentSessionId) {
-      const session = await createSession.mutateAsync("New Chat");
-      setCurrentSessionId(session.id);
-      
-      // Add initial assistant message
-      await addMessage.mutateAsync({
-        sessionId: session.id,
-        content: "Hello! I'm your AI regulatory assistant. What would you like to know about EU regulations?",
-        author: "assistant",
-      });
-
-      // Now send the user message
-      await addMessage.mutateAsync({
-        sessionId: session.id,
-        content: messageText,
-        author: "user",
-      });
-    } else {
-      // Add user message to existing session
+    // Add user message to current session
+    if (currentSessionId) {
       await addMessage.mutateAsync({
         sessionId: currentSessionId,
         content: messageText,
@@ -123,7 +115,7 @@ export default function Chat() {
       });
 
       // Update session title if it's the first user message
-      if (messages.length <= 1) {
+      if (messages.length === 1) {
         const title = messageText.slice(0, 50) + (messageText.length > 50 ? "..." : "");
         await updateSession.mutateAsync({ sessionId: currentSessionId, title });
       }
