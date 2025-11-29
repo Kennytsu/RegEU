@@ -332,6 +332,38 @@ async def delete_company_profile(company_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.patch("/{company_id}", response_model=CompanyProfileResponse)
+async def update_company_profile(company_id: str, updates: dict):
+    """
+    Update a company profile
+    
+    Args:
+        company_id: ID of the company to update
+        updates: Dictionary of fields to update (regulatory_topics, company_name, industry, description, etc.)
+    
+    Returns:
+        CompanyProfileResponse with updated company data
+    """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
+    
+    try:
+        # Update the company profile
+        result = supabase.table("company_profile").update(updates).eq("id", company_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"Company with ID '{company_id}' not found")
+        
+        profile = CompanyProfile(**result.data[0])
+        return CompanyProfileResponse(success=True, data=profile)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating company {company_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{company_name}/regulatory-topics")
 async def get_company_regulatory_topics(company_name: str):
     """

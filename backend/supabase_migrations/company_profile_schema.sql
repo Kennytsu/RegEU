@@ -4,12 +4,11 @@
 -- Create enum for regulatory topics (matching the backend enum)
 CREATE TYPE regulatory_topic AS ENUM (
     'AI Act',
-    'Bafin',
+    'BaFin',
     'Cybersecurity',
-    'Gdpr',
-    'Aml',
-    'kyc',
-    'Esg'
+    'GDPR',
+    'AMLR',
+    'ESG'
 );
 
 -- Create company_profile table

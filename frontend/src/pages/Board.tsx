@@ -2,17 +2,12 @@ import { useState, useEffect, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { RegulatoryCard } from "@/components/shared/RegulatoryCard";
 import { useLegislativeFiles, LegislativeFileItem } from "@/hooks/useMeetings";
+import { useUserTopics } from "@/hooks/useUserTopics";
 import { LegislativeDetailSheet } from "@/components/shared/LegislativeDetailSheet";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
+import { REGULATORY_TOPICS } from "@/lib/topicUtils";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -25,7 +20,10 @@ import {
   Search, 
   ArrowUpDown, 
   Columns3, 
-  ToggleLeft 
+  ToggleLeft,
+  Building2,
+  Calendar,
+  Tags
 } from "lucide-react";
 
 // Define board columns based on legislative stages
@@ -39,10 +37,11 @@ const columns = [
   { id: 'completed', label: 'Completed', statuses: ['Procedure completed', 'Procedure completed - delegated act enters into force', 'Procedure lapsed or withdrawn', 'Procedure rejected'] },
 ];
 
-type SortOption = 'title' | 'year' | 'lastpubdate' | 'committee';
+type SortOption = 'title' | 'year' | 'lastpubdate' | 'committee' | 'topics';
 
 export default function Board() {
-  const { data: legislativeItems = [], isLoading } = useLegislativeFiles(100);
+  const { data: legislativeItems = [], isLoading } = useLegislativeFiles(2000); // Increased limit to fetch all data
+  const { data: userTopics = [], isLoading: loadingUserTopics } = useUserTopics();
   const [items, setItems] = useState<LegislativeFileItem[]>([]);
   const [draggedItem, setDraggedItem] = useState<LegislativeFileItem | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -54,14 +53,30 @@ export default function Board() {
   const [sortBy, setSortBy] = useState<SortOption>('lastpubdate');
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(columns.map(c => c.id));
   const [personalized, setPersonalized] = useState(false);
 
   useEffect(() => {
     if (legislativeItems.length > 0) {
       setItems(legislativeItems);
+      // Debug: Log topics to see what we're working with
+      console.log('Legislative items with topics:', legislativeItems.map(item => ({
+        title: item.title.slice(0, 50),
+        subjects: item.subjects,
+        topics: item.topics
+      })));
     }
   }, [legislativeItems]);
+
+  // Handle personalized toggle - apply user's topics when enabled
+  useEffect(() => {
+    if (personalized && userTopics.length > 0) {
+      setSelectedTopics(userTopics);
+    } else if (!personalized) {
+      setSelectedTopics([]);
+    }
+  }, [personalized, userTopics]);
 
   // Extract unique committees and years from data
   const { allCommittees, allYears } = useMemo(() => {
@@ -81,6 +96,9 @@ export default function Board() {
       allYears: Array.from(years).sort((a, b) => parseInt(b) - parseInt(a))
     };
   }, [legislativeItems]);
+
+  // Use standard regulatory topics instead of dynamic extraction
+  const allTopics = Array.from(REGULATORY_TOPICS);
 
   // Filter and sort items
   const filteredAndSortedItems = useMemo(() => {
@@ -111,6 +129,15 @@ export default function Board() {
       });
     }
 
+    // Topics filter
+    if (selectedTopics.length > 0) {
+      filtered = filtered.filter(item => {
+        // Use the normalized topics from the item
+        const itemTopics = item.topics || [];
+        return selectedTopics.some(topic => itemTopics.includes(topic));
+      });
+    }
+
     // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -122,13 +149,18 @@ export default function Board() {
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         case 'committee':
           return (a.committee || '').localeCompare(b.committee || '');
+        case 'topics':
+          // Sort by first topic alphabetically
+          const aTopic = a.topics?.[0] || '';
+          const bTopic = b.topics?.[0] || '';
+          return aTopic.localeCompare(bTopic);
         default:
           return 0;
       }
     });
 
     return filtered;
-  }, [items, searchQuery, selectedCommittees, selectedYears, sortBy]);
+  }, [items, searchQuery, selectedCommittees, selectedYears, selectedTopics, sortBy]);
 
   const getColumnItems = (statuses: string[]) => 
     filteredAndSortedItems.filter(item => 
@@ -211,9 +243,15 @@ export default function Board() {
               size="sm"
               onClick={() => setPersonalized(!personalized)}
               className="h-9"
+              disabled={loadingUserTopics || userTopics.length === 0}
             >
               <ToggleLeft className="h-4 w-4 mr-2" />
               Personalized
+              {personalized && userTopics.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary-foreground text-primary rounded">
+                  {userTopics.length}
+                </span>
+              )}
             </Button>
 
             {/* Sort Dropdown */}
@@ -251,6 +289,12 @@ export default function Board() {
                 >
                   Committee
                 </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={sortBy === 'topics'}
+                  onCheckedChange={() => setSortBy('topics')}
+                >
+                  Topics
+                </DropdownMenuCheckboxItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -278,52 +322,106 @@ export default function Board() {
             </DropdownMenu>
 
             {/* Committee Filter */}
-            <Select
-              value={selectedCommittees.length > 0 ? selectedCommittees[0] : "all"}
-              onValueChange={(value) => {
-                if (value === "all") {
-                  setSelectedCommittees([]);
-                } else {
-                  setSelectedCommittees([value]);
-                }
-              }}
-            >
-              <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder="All Committees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Committees</SelectItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Committees
+                  {selectedCommittees.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded">
+                      {selectedCommittees.length}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[220px] max-h-[300px] overflow-y-auto">
+                <DropdownMenuLabel>Filter by committees</DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 {allCommittees.map((committee) => (
-                  <SelectItem key={committee} value={committee}>
+                  <DropdownMenuCheckboxItem
+                    key={committee}
+                    checked={selectedCommittees.includes(committee)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedCommittees([...selectedCommittees, committee]);
+                      } else {
+                        setSelectedCommittees(selectedCommittees.filter(c => c !== committee));
+                      }
+                    }}
+                  >
                     {committee}
-                  </SelectItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
-              </SelectContent>
-            </Select>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Year Filter */}
-            <Select
-              value={selectedYears.length > 0 ? selectedYears[0] : "all"}
-              onValueChange={(value) => {
-                if (value === "all") {
-                  setSelectedYears([]);
-                } else {
-                  setSelectedYears([value]);
-                }
-              }}
-            >
-              <SelectTrigger className="w-[140px] h-9">
-                <SelectValue placeholder="All Years" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Years
+                  {selectedYears.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded">
+                      {selectedYears.length}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[150px] max-h-[300px] overflow-y-auto">
+                <DropdownMenuLabel>Filter by years</DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 {allYears.map((year) => (
-                  <SelectItem key={year} value={year}>
+                  <DropdownMenuCheckboxItem
+                    key={year}
+                    checked={selectedYears.includes(year)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedYears([...selectedYears, year]);
+                      } else {
+                        setSelectedYears(selectedYears.filter(y => y !== year));
+                      }
+                    }}
+                  >
                     {year}
-                  </SelectItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
-              </SelectContent>
-            </Select>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Topics Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <Tags className="h-4 w-4 mr-2" />
+                  Topics
+                  {selectedTopics.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded">
+                      {selectedTopics.length}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                <DropdownMenuLabel>Filter by topics</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {allTopics.map((topic) => (
+                  <DropdownMenuCheckboxItem
+                    key={topic}
+                    checked={selectedTopics.includes(topic)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedTopics([...selectedTopics, topic]);
+                      } else {
+                        setSelectedTopics(selectedTopics.filter(t => t !== topic));
+                      }
+                    }}
+                  >
+                    {topic}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

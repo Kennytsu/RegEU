@@ -61,9 +61,13 @@ app.add_middleware(
 from app.api.companies import router as companies_router
 app.include_router(companies_router)
 
-# RAG router for regulatory intelligence
-from app.api.rag import router as rag_router
-app.include_router(rag_router)
+# Always include contacts router (returns 503 if DB not configured)
+from app.api.contacts import router as contacts_router
+app.include_router(contacts_router)
+
+# Always include voice calls router (uses in-memory storage)
+from app.api.voice_calls import router as voice_calls_router
+app.include_router(voice_calls_router)
 
 # Legislative files router requires Supabase
 if SUPABASE_CONFIGURED:

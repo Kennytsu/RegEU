@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./StatusBadge";
+import { TopicBadge } from "./TopicBadge";
 import { 
   ExternalLink, 
   Users, 
@@ -15,8 +16,7 @@ import {
   Bell,
   Calendar,
   Building,
-  Tag,
-  ChevronRight
+  Tag
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -40,6 +40,7 @@ export function LegislativeDetailSheet({
   const hasKeyEvents = item.keyEvents && item.keyEvents.length > 0;
   const hasKeyPlayers = item.keyPlayers && item.keyPlayers.length > 0;
   const hasSubjects = item.subjects && item.subjects.length > 0;
+  const hasTopics = item.topics && item.topics.length > 0;
 
   const year = item.date ? new Date(item.date).getFullYear() : null;
 
@@ -111,6 +112,21 @@ export function LegislativeDetailSheet({
                 )}
               </div>
             </section>
+
+            {/* Regulatory Topics */}
+            {hasTopics && (
+              <section className="space-y-3">
+                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Tag className="w-3 h-3" />
+                  Regulatory Topics
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {item.topics!.map((topic, idx) => (
+                    <TopicBadge key={idx} topicId={topic} />
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Subjects */}
             {hasSubjects && (
@@ -194,20 +210,58 @@ export function LegislativeDetailSheet({
                   </AccordionTrigger>
                   <AccordionContent className="pb-3">
                     <div className="space-y-1 pt-1">
-                      {item.documents!.map((doc, idx) => (
-                        <a
-                          key={idx}
-                          href={doc.link || doc.summary_link || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-2 -mx-2 rounded-md hover:bg-muted transition-colors group"
-                        >
-                          <span className="text-sm text-foreground">
-                            {doc.title || doc.type || "Document"}
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </a>
-                      ))}
+                      {item.documents!.map((doc, idx) => {
+                        const docLink = doc.link || doc.summary_link;
+                        const docTitle = doc.title || doc.type || `Document ${idx + 1}`;
+                        const hasValidLink = docLink && docLink !== "#" && docLink.startsWith('http');
+                        
+                        return hasValidLink ? (
+                          <a
+                            key={idx}
+                            href={docLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-2 -mx-2 rounded-md hover:bg-muted transition-colors group"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-foreground truncate">
+                                {docTitle}
+                              </p>
+                              {doc.date && (
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(doc.date).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-2 shrink-0" />
+                          </a>
+                        ) : (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-2 -mx-2 rounded-md text-muted-foreground"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm truncate">
+                                {docTitle}
+                              </p>
+                              {doc.date && (
+                                <p className="text-xs">
+                                  {new Date(doc.date).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-xs ml-2 shrink-0">(No link)</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </AccordionContent>
                 </AccordionItem>

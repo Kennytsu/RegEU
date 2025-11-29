@@ -85,7 +85,7 @@ export default function Landing() {
       {/* Footer */}
       <footer className="border-t border-border py-6 px-6">
         <div className="max-w-4xl mx-auto text-center text-xs text-muted-foreground">
-          © 2024 EUgene
+          © 2025 EUgene
         </div>
       </footer>
     </div>

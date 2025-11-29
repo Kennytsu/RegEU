@@ -45,13 +45,16 @@ export interface ChatMessage {
 
 export const availableTopics = [
   { id: 'ai-act', name: 'AI Act', description: 'Artificial Intelligence regulations' },
+  { id: 'bafin', name: 'BaFin', description: 'Federal Financial Supervisory Authority' },
+  { id: 'cybersecurity', name: 'Cybersecurity', description: 'NIS2 and cyber regulations' },
   { id: 'gdpr', name: 'GDPR', description: 'General Data Protection Regulation' },
+  { id: 'amlr', name: 'AMLR', description: 'Anti-Money Laundering Regulations' },
+  { id: 'esg', name: 'ESG', description: 'Environmental, Social, Governance' },
+  // Additional topics
   { id: 'mica', name: 'MiCA', description: 'Markets in Crypto-Assets' },
   { id: 'dma', name: 'DMA', description: 'Digital Markets Act' },
   { id: 'dsa', name: 'DSA', description: 'Digital Services Act' },
-  { id: 'esg', name: 'ESG/Climate', description: 'Environmental, Social, Governance' },
   { id: 'health-data', name: 'Health Data', description: 'European Health Data Space' },
-  { id: 'cybersecurity', name: 'Cybersecurity', description: 'NIS2 and cyber regulations' },
   { id: 'fintech', name: 'Fintech', description: 'Financial technology regulations' },
   { id: 'ecommerce', name: 'E-Commerce', description: 'Digital commerce regulations' },
 ];

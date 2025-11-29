@@ -94,6 +94,94 @@ export interface CompanyListResponse {
   count: number;
 }
 
+export interface NotificationContact {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+  user_id: string;
+  name: string;
+  role?: string;
+  email: string;
+  phone?: string;
+  channel_email: boolean;
+  channel_sms: boolean;
+  channel_calls: boolean;
+  frequency: 'realtime' | 'daily' | 'weekly';
+  high_impact_only: boolean;
+  is_active?: boolean;
+}
+
+export interface NotificationContactCreate {
+  name: string;
+  role?: string;
+  email: string;
+  phone?: string;
+  channel_email: boolean;
+  channel_sms: boolean;
+  channel_calls: boolean;
+  frequency: 'realtime' | 'daily' | 'weekly';
+  high_impact_only: boolean;
+}
+
+export interface NotificationContactUpdate {
+  name?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  channel_email?: boolean;
+  channel_sms?: boolean;
+  channel_calls?: boolean;
+  frequency?: 'realtime' | 'daily' | 'weekly';
+  high_impact_only?: boolean;
+  is_active?: boolean;
+}
+
+export interface NotificationContactResponse {
+  success: boolean;
+  data?: NotificationContact;
+  error?: string;
+}
+
+export interface NotificationContactListResponse {
+  success: boolean;
+  data: NotificationContact[];
+  count: number;
+}
+
+export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface RegulatoryUpdatePayload {
+  user_id: string;
+  user_name: string;
+  company_name: string;
+  regulation_type: string;
+  regulation_title: string;
+  effective_date: string;
+  deadline: string;
+  summary: string;
+  action_required: string;
+  impact_level: ImpactLevel;
+  reference_url?: string;
+}
+
+export interface GenerateVoiceCallLinkRequest {
+  payload: RegulatoryUpdatePayload;
+  expires_in_minutes?: number;
+}
+
+export interface GenerateVoiceCallLinkResponse {
+  success: boolean;
+  token: string;
+  link: string;
+  expires_at: string;
+}
+
+export interface GetVoiceCallPayloadResponse {
+  success: boolean;
+  payload?: RegulatoryUpdatePayload;
+  error?: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -229,10 +317,93 @@ class ApiClient {
   }
 
   /**
+   * Update a company profile
+   */
+  async updateCompanyProfile(companyId: string, updates: {
+    regulatory_topics?: string[];
+    company_name?: string;
+    industry?: string;
+    description?: string;
+  }): Promise<CompanyProfileResponse> {
+    return this.request<CompanyProfileResponse>(`/companies/${encodeURIComponent(companyId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
    * Check backend health
    */
   async healthCheck(): Promise<{ status: string; service: string; scheduler_enabled: boolean }> {
     return this.request('/health');
+  }
+
+  /**
+   * Get notification contacts for a user
+   */
+  async listUserContacts(userId: string, isActive?: boolean): Promise<NotificationContactListResponse> {
+    const params = new URLSearchParams();
+    if (isActive !== undefined) params.set('is_active', isActive.toString());
+
+    const query = params.toString();
+    const endpoint = query ? `/contacts/user/${encodeURIComponent(userId)}?${query}` : `/contacts/user/${encodeURIComponent(userId)}`;
+
+    return this.request<NotificationContactListResponse>(endpoint);
+  }
+
+  /**
+   * Create a notification contact for a user
+   */
+  async createContact(userId: string, contact: NotificationContactCreate): Promise<NotificationContactResponse> {
+    return this.request<NotificationContactResponse>(`/contacts/user/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify(contact),
+    });
+  }
+
+  /**
+   * Update a notification contact
+   */
+  async updateContact(contactId: string, updates: NotificationContactUpdate): Promise<NotificationContactResponse> {
+    return this.request<NotificationContactResponse>(`/contacts/${encodeURIComponent(contactId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * Delete a notification contact
+   */
+  async deleteContact(contactId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/contacts/${encodeURIComponent(contactId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Generate a voice call link for regulatory update
+   */
+  async generateVoiceCallLink(request: GenerateVoiceCallLinkRequest): Promise<GenerateVoiceCallLinkResponse> {
+    return this.request<GenerateVoiceCallLinkResponse>('/voice-calls/generate-link', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Get voice call payload from token
+   */
+  async getVoiceCallPayload(token: string): Promise<GetVoiceCallPayloadResponse> {
+    return this.request<GetVoiceCallPayloadResponse>(`/voice-calls/payload/${encodeURIComponent(token)}`);
+  }
+
+  /**
+   * Invalidate a voice call token
+   */
+  async invalidateVoiceCallToken(token: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/voice-calls/token/${encodeURIComponent(token)}`, {
+      method: 'DELETE',
+    });
   }
 }
 

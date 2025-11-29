@@ -10,12 +10,11 @@ import { useAuth } from "@/contexts/AuthContext";
 // Available regulatory topics (matching backend enum)
 const REGULATORY_TOPICS = [
   "AI Act",
-  "Bafin",
+  "BaFin",
   "Cybersecurity",
-  "Gdpr",
-  "Aml",
-  "kyc",
-  "Esg",
+  "GDPR",
+  "AMLR",
+  "ESG",
 ] as const;
 
 export default function Onboarding() {

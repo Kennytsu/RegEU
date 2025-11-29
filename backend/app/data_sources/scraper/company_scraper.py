@@ -331,7 +331,7 @@ Available regulatory topics:
 {topics_str}
 
 CRITICAL RULES (must follow):
-1. Financial services (banking, fintech, payments, trading, investment): MUST include Bafin, GDPR, AML, KYC
+1. Financial services (banking, fintech, payments, trading, investment): MUST include BaFin, GDPR, AMLR
 2. GDPR applies to almost ALL companies - include it unless the company clearly does NOT handle any customer/user data
 3. AI/ML companies: MUST include AI Act, GDPR
 4. Any online service, platform, or SaaS: MUST include GDPR
@@ -344,10 +344,10 @@ Instructions:
 - GDPR should be included for 90%+ of companies
 
 Example responses:
-- Fintech: "Bafin, GDPR, AML, KYC"
+- Fintech: "BaFin, GDPR, AMLR"
 - AI startup: "AI Act, GDPR"
 - SaaS platform: "GDPR, Cybersecurity"
-- Bank: "Bafin, GDPR, AML, KYC"
+- Bank: "BaFin, GDPR, AMLR"
 - Green tech: "ESG, GDPR"
 
 Response (comma-separated topics only):"""
@@ -406,8 +406,7 @@ Response (comma-separated topics only):"""
             RegulatoryTopic.GDPR: ['data', 'privacy', 'gdpr', 'personal', 'information', 'data protection', 'consent'],
             RegulatoryTopic.CYBERSECURITY: ['security', 'cyber', 'encryption', 'authentication', 'firewall', 'threat', 'vulnerability'],
             RegulatoryTopic.BAFIN: ['finance', 'banking', 'payment', 'fintech', 'financial', 'investment', 'trading', 'broker'],
-            RegulatoryTopic.AML: ['anti-money laundering', 'aml', 'money laundering', 'financial crime', 'compliance', 'transaction monitoring'],
-            RegulatoryTopic.KYC: ['kyc', 'know your customer', 'identity verification', 'customer verification', 'onboarding', 'due diligence'],
+            RegulatoryTopic.AMLR: ['anti-money laundering', 'aml', 'amlr', 'money laundering', 'financial crime', 'compliance', 'transaction monitoring', 'kyc', 'know your customer', 'identity verification', 'customer verification', 'onboarding', 'due diligence'],
             RegulatoryTopic.ESG: ['environmental', 'social', 'governance', 'esg', 'sustainability', 'climate', 'green', 'carbon', 'renewable'],
         }
 

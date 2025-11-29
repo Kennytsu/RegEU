@@ -20,6 +20,9 @@ const typeIcons = {
 
 export function RegulatoryCard({ item, compact = false, className, draggable, onClick }: RegulatoryCardProps) {
   const TypeIcon = typeIcons[item.type];
+  
+  // Check if item has committee (from LegislativeFileItem)
+  const committee = 'committee' in item ? (item as any).committee : null;
 
   return (
     <div
@@ -34,7 +37,7 @@ export function RegulatoryCard({ item, compact = false, className, draggable, on
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 text-muted-foreground">
           <TypeIcon className="w-3.5 h-3.5" />
-          <span className="text-xs capitalize">{item.type}</span>
+          <span className="text-xs font-mono">{item.id}</span>
         </div>
       </div>
 
@@ -51,6 +54,15 @@ export function RegulatoryCard({ item, compact = false, className, draggable, on
         </p>
       )}
 
+      {/* Committee badge */}
+      {committee && (
+        <div className="mb-3">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            {committee}
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
         <Calendar className="w-3 h-3" />
         <span>{new Date(item.date).toLocaleDateString('en-EU', { 
@@ -60,15 +72,22 @@ export function RegulatoryCard({ item, compact = false, className, draggable, on
         })}</span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex flex-wrap gap-1">
-          {item.topics.slice(0, compact ? 1 : 2).map((topic) => (
+      {/* Topic badges - show up to 3 */}
+      {item.topics && item.topics.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {item.topics.slice(0, compact ? 2 : 3).map((topic) => (
             <TopicBadge key={topic} topicId={topic} />
           ))}
-          {item.topics.length > (compact ? 1 : 2) && (
-            <span className="text-xs text-muted-foreground">+{item.topics.length - (compact ? 1 : 2)}</span>
+          {item.topics.length > (compact ? 2 : 3) && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground">
+              +{item.topics.length - (compact ? 2 : 3)} more
+            </span>
           )}
         </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <div className="flex-1" />
         
         {!onClick && (
           <a

@@ -12,12 +12,11 @@ from pydantic import BaseModel, HttpUrl
 class RegulatoryTopic(str, Enum):
     """Enum for regulatory topics matching the database"""
     AI_ACT = "AI Act"
-    BAFIN = "Bafin"
+    BAFIN = "BaFin"
     CYBERSECURITY = "Cybersecurity"
-    GDPR = "Gdpr"
-    AML = "Aml"
-    KYC = "kyc"
-    ESG = "Esg"
+    GDPR = "GDPR"
+    AMLR = "AMLR"
+    ESG = "ESG"
 
 
 class CompanyProfile(BaseModel):

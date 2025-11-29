@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { RegulatoryItem } from "@/lib/mockData";
+import { normalizeTopics } from "@/lib/topicUtils";
 
 export function useMeetings(limit = 20) {
   return useQuery({
@@ -135,6 +136,9 @@ export function useLegislativeFiles(limit = 20) {
           keyPlayers = file.key_players as KeyPlayer[];
         }
 
+        // Normalize topics from subjects to standard regulatory topics
+        const normalizedTopics = normalizeTopics(subjects);
+
         return {
           id: file.id,
           title: file.title || "Untitled Legislation",
@@ -143,7 +147,7 @@ export function useLegislativeFiles(limit = 20) {
           summary: file.status || "Status unknown",
           impact: mapLegislativeImpact(file.status),
           status: mapLegislativeStatus(file.status),
-          topics: [],
+          topics: normalizedTopics, // Use normalized topics instead of raw subjects
           source: file.link || "#",
           legislativeStatus: file.status,
           committee: file.committee || undefined,
