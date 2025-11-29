@@ -94,6 +94,60 @@ export interface CompanyListResponse {
   count: number;
 }
 
+export interface NotificationContact {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+  user_id: string;
+  name: string;
+  role?: string;
+  email: string;
+  phone?: string;
+  channel_email: boolean;
+  channel_sms: boolean;
+  channel_calls: boolean;
+  frequency: 'realtime' | 'daily' | 'weekly';
+  high_impact_only: boolean;
+  is_active?: boolean;
+}
+
+export interface NotificationContactCreate {
+  name: string;
+  role?: string;
+  email: string;
+  phone?: string;
+  channel_email: boolean;
+  channel_sms: boolean;
+  channel_calls: boolean;
+  frequency: 'realtime' | 'daily' | 'weekly';
+  high_impact_only: boolean;
+}
+
+export interface NotificationContactUpdate {
+  name?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  channel_email?: boolean;
+  channel_sms?: boolean;
+  channel_calls?: boolean;
+  frequency?: 'realtime' | 'daily' | 'weekly';
+  high_impact_only?: boolean;
+  is_active?: boolean;
+}
+
+export interface NotificationContactResponse {
+  success: boolean;
+  data?: NotificationContact;
+  error?: string;
+}
+
+export interface NotificationContactListResponse {
+  success: boolean;
+  data: NotificationContact[];
+  count: number;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -233,6 +287,48 @@ class ApiClient {
    */
   async healthCheck(): Promise<{ status: string; service: string; scheduler_enabled: boolean }> {
     return this.request('/health');
+  }
+
+  /**
+   * Get notification contacts for a user
+   */
+  async listUserContacts(userId: string, isActive?: boolean): Promise<NotificationContactListResponse> {
+    const params = new URLSearchParams();
+    if (isActive !== undefined) params.set('is_active', isActive.toString());
+
+    const query = params.toString();
+    const endpoint = query ? `/contacts/user/${encodeURIComponent(userId)}?${query}` : `/contacts/user/${encodeURIComponent(userId)}`;
+
+    return this.request<NotificationContactListResponse>(endpoint);
+  }
+
+  /**
+   * Create a notification contact for a user
+   */
+  async createContact(userId: string, contact: NotificationContactCreate): Promise<NotificationContactResponse> {
+    return this.request<NotificationContactResponse>(`/contacts/user/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify(contact),
+    });
+  }
+
+  /**
+   * Update a notification contact
+   */
+  async updateContact(contactId: string, updates: NotificationContactUpdate): Promise<NotificationContactResponse> {
+    return this.request<NotificationContactResponse>(`/contacts/${encodeURIComponent(contactId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * Delete a notification contact
+   */
+  async deleteContact(contactId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/contacts/${encodeURIComponent(contactId)}`, {
+      method: 'DELETE',
+    });
   }
 }
 

@@ -2,11 +2,10 @@ import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockContacts, Contact } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { Mail, Phone, MessageSquare, Save, Plus, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
-import { apiClient, CompanyProfile } from "@/lib/api-client";
+import { apiClient, CompanyProfile, NotificationContact } from "@/lib/api-client";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Available regulatory topics (matching backend enum)
@@ -22,46 +21,54 @@ const REGULATORY_TOPICS = [
 
 export default function Settings() {
   const { user } = useAuth();
-  const [contacts, setContacts] = useState<Contact[]>(mockContacts);
+  const [contacts, setContacts] = useState<NotificationContact[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch user's company profiles on mount
+  // Fetch user's data on mount
   useEffect(() => {
-    const fetchCompanyProfiles = async () => {
+    const fetchData = async () => {
       if (!user) {
         setIsLoading(false);
         return;
       }
 
       try {
-        const result = await apiClient.listCompanies({ user_id: user.id });
+        // Fetch company profiles
+        const profilesResult = await apiClient.listCompanies({ user_id: user.id });
 
-        if (result.success && result.data.length > 0) {
-          setCompanyProfiles(result.data);
+        if (profilesResult.success && profilesResult.data.length > 0) {
+          setCompanyProfiles(profilesResult.data);
 
           // Aggregate all regulatory topics from all company profiles
           const allTopics = new Set<string>();
-          result.data.forEach(profile => {
+          profilesResult.data.forEach(profile => {
             profile.regulatory_topics?.forEach(topic => allTopics.add(topic));
           });
 
           setSelectedTopics(Array.from(allTopics));
         }
+
+        // Fetch notification contacts
+        const contactsResult = await apiClient.listUserContacts(user.id, true);
+
+        if (contactsResult.success) {
+          setContacts(contactsResult.data);
+        }
       } catch (error) {
-        console.error('Error fetching company profiles:', error);
-        toast.error('Failed to load company profiles');
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load settings');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchCompanyProfiles();
+    fetchData();
   }, [user]);
 
-  const handleContactUpdate = (id: string, field: keyof Contact, value: any) => {
+  const handleContactUpdate = (id: string, field: keyof NotificationContact, value: any) => {
     setContacts(prev =>
       prev.map(contact =>
         contact.id === id ? { ...contact, [field]: value } : contact
@@ -71,11 +78,13 @@ export default function Settings() {
 
   const handleChannelToggle = (id: string, channel: 'email' | 'sms' | 'calls') => {
     setContacts(prev =>
-      prev.map(contact =>
-        contact.id === id
-          ? { ...contact, channels: { ...contact.channels, [channel]: !contact.channels[channel] } }
-          : contact
-      )
+      prev.map(contact => {
+        if (contact.id === id) {
+          const fieldName = `channel_${channel}` as 'channel_email' | 'channel_sms' | 'channel_calls';
+          return { ...contact, [fieldName]: !contact[fieldName] };
+        }
+        return contact;
+      })
     );
   };
 
@@ -88,20 +97,59 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
-    if (!user || companyProfiles.length === 0) {
-      toast.error("No company profiles found");
+    if (!user) {
+      toast.error("You must be logged in");
       return;
     }
 
     setIsSaving(true);
 
     try {
-      // Update regulatory topics for all company profiles
-      // For now, we'll update the first profile's topics
-      // TODO: In the future, allow per-company topic configuration
-      const profileToUpdate = companyProfiles[0];
+      // Save all contact updates
+      const updatePromises = contacts
+        .filter(contact => contact.id) // Only update existing contacts
+        .map(contact => {
+          if (!contact.id) return Promise.resolve();
 
-      toast.success("Settings saved");
+          return apiClient.updateContact(contact.id, {
+            name: contact.name,
+            role: contact.role,
+            email: contact.email,
+            phone: contact.phone,
+            channel_email: contact.channel_email,
+            channel_sms: contact.channel_sms,
+            channel_calls: contact.channel_calls,
+            frequency: contact.frequency,
+            high_impact_only: contact.high_impact_only,
+          });
+        });
+
+      // Create new contacts (those without IDs)
+      const createPromises = contacts
+        .filter(contact => !contact.id && contact.email) // New contacts with email
+        .map(contact =>
+          apiClient.createContact(user.id, {
+            name: contact.name,
+            role: contact.role,
+            email: contact.email,
+            phone: contact.phone,
+            channel_email: contact.channel_email,
+            channel_sms: contact.channel_sms,
+            channel_calls: contact.channel_calls,
+            frequency: contact.frequency,
+            high_impact_only: contact.high_impact_only,
+          })
+        );
+
+      await Promise.all([...updatePromises, ...createPromises]);
+
+      toast.success("Settings saved successfully");
+
+      // Refresh contacts
+      const contactsResult = await apiClient.listUserContacts(user.id, true);
+      if (contactsResult.success) {
+        setContacts(contactsResult.data);
+      }
     } catch (error) {
       console.error('Error saving settings:', error);
       toast.error('Failed to save settings');
@@ -111,21 +159,38 @@ export default function Settings() {
   };
 
   const handleAddContact = () => {
-    const newContact: Contact = {
-      id: Date.now().toString(),
+    if (!user) return;
+
+    const newContact: NotificationContact = {
+      user_id: user.id,
       name: "",
       role: "",
       email: "",
       phone: "",
-      channels: { email: true, sms: false, calls: false },
+      channel_email: true,
+      channel_sms: false,
+      channel_calls: false,
       frequency: "daily",
-      highImpactOnly: false,
+      high_impact_only: false,
     };
     setContacts(prev => [...prev, newContact]);
   };
 
-  const handleRemoveContact = (id: string) => {
-    setContacts(prev => prev.filter(contact => contact.id !== id));
+  const handleRemoveContact = async (id?: string) => {
+    if (!id) {
+      // Remove unsaved contact (no ID)
+      setContacts(prev => prev.filter(contact => contact.id !== undefined));
+      return;
+    }
+
+    try {
+      await apiClient.deleteContact(id);
+      setContacts(prev => prev.filter(contact => contact.id !== id));
+      toast.success("Contact deleted");
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+      toast.error('Failed to delete contact');
+    }
   };
 
   if (isLoading) {
@@ -206,29 +271,29 @@ export default function Settings() {
             </div>
 
             <div className="space-y-3">
-              {contacts.map((contact) => (
-                <div key={contact.id} className="p-4 rounded-lg border border-border">
+              {contacts.map((contact, idx) => (
+                <div key={contact.id || `new-${idx}`} className="p-4 rounded-lg border border-border">
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <Input
                       value={contact.name}
-                      onChange={(e) => handleContactUpdate(contact.id, 'name', e.target.value)}
+                      onChange={(e) => handleContactUpdate(contact.id!, 'name', e.target.value)}
                       placeholder="Name"
                     />
                     <Input
-                      value={contact.role}
-                      onChange={(e) => handleContactUpdate(contact.id, 'role', e.target.value)}
+                      value={contact.role || ""}
+                      onChange={(e) => handleContactUpdate(contact.id!, 'role', e.target.value)}
                       placeholder="Role"
                     />
                     <Input
                       type="email"
                       value={contact.email}
-                      onChange={(e) => handleContactUpdate(contact.id, 'email', e.target.value)}
+                      onChange={(e) => handleContactUpdate(contact.id!, 'email', e.target.value)}
                       placeholder="Email"
                     />
                     <Input
                       type="tel"
-                      value={contact.phone}
-                      onChange={(e) => handleContactUpdate(contact.id, 'phone', e.target.value)}
+                      value={contact.phone || ""}
+                      onChange={(e) => handleContactUpdate(contact.id!, 'phone', e.target.value)}
                       placeholder="Phone"
                     />
                   </div>
@@ -240,21 +305,24 @@ export default function Settings() {
                       { key: 'email' as const, icon: Mail, label: 'Email' },
                       { key: 'sms' as const, icon: MessageSquare, label: 'SMS' },
                       { key: 'calls' as const, icon: Phone, label: 'Calls' },
-                    ].map((channel) => (
-                      <button
-                        key={channel.key}
-                        onClick={() => handleChannelToggle(contact.id, channel.key)}
-                        className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
-                          contact.channels[channel.key]
-                            ? "bg-foreground text-background"
-                            : "bg-secondary text-muted-foreground"
-                        )}
-                      >
-                        <channel.icon className="w-3 h-3" />
-                        {channel.label}
-                      </button>
-                    ))}
+                    ].map((channel) => {
+                      const fieldName = `channel_${channel.key}` as 'channel_email' | 'channel_sms' | 'channel_calls';
+                      return (
+                        <button
+                          key={channel.key}
+                          onClick={() => handleChannelToggle(contact.id!, channel.key)}
+                          className={cn(
+                            "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
+                            contact[fieldName]
+                              ? "bg-foreground text-background"
+                              : "bg-secondary text-muted-foreground"
+                          )}
+                        >
+                          <channel.icon className="w-3 h-3" />
+                          {channel.label}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Options */}
@@ -262,7 +330,7 @@ export default function Settings() {
                     <div className="flex items-center gap-3">
                       <select
                         value={contact.frequency}
-                        onChange={(e) => handleContactUpdate(contact.id, 'frequency', e.target.value)}
+                        onChange={(e) => handleContactUpdate(contact.id!, 'frequency', e.target.value as 'realtime' | 'daily' | 'weekly')}
                         className="px-2 py-1 rounded bg-secondary border-0 text-xs text-foreground"
                       >
                         <option value="realtime">Real-time</option>
@@ -271,10 +339,10 @@ export default function Settings() {
                       </select>
 
                       <button
-                        onClick={() => handleContactUpdate(contact.id, 'highImpactOnly', !contact.highImpactOnly)}
+                        onClick={() => handleContactUpdate(contact.id!, 'high_impact_only', !contact.high_impact_only)}
                         className={cn(
                           "px-2 py-1 rounded text-xs transition-colors",
-                          contact.highImpactOnly
+                          contact.high_impact_only
                             ? "bg-red-50 text-red-700"
                             : "bg-secondary text-muted-foreground"
                         )}

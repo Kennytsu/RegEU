@@ -61,6 +61,10 @@ app.add_middleware(
 from app.api.companies import router as companies_router
 app.include_router(companies_router)
 
+# Always include contacts router (returns 503 if DB not configured)
+from app.api.contacts import router as contacts_router
+app.include_router(contacts_router)
+
 # Legislative files router requires Supabase
 if SUPABASE_CONFIGURED:
     from app.api.legislative_files import router as legislative_files_router
