@@ -145,10 +145,13 @@ class ApiClient {
   /**
    * Save reviewed company profiles to database
    */
-  async saveCompanyProfiles(profiles: CompanyProfileSimple[]): Promise<CompanyProfileSimpleListResponse> {
+  async saveCompanyProfiles(profiles: CompanyProfileSimple[], userId: string): Promise<CompanyProfileSimpleListResponse> {
     return this.request<CompanyProfileSimpleListResponse>('/companies/profiles/save', {
       method: 'POST',
-      body: JSON.stringify(profiles),
+      body: JSON.stringify({
+        profiles,
+        user_id: userId,
+      }),
     });
   }
 
@@ -170,18 +173,31 @@ class ApiClient {
   }
 
   /**
+   * Check if a user has any company profiles
+   */
+  async checkUserHasProfiles(userId: string): Promise<{
+    success: boolean;
+    has_profiles: boolean;
+    count: number;
+  }> {
+    return this.request(`/companies/user/${encodeURIComponent(userId)}/has-profiles`);
+  }
+
+  /**
    * List all companies with optional filtering
    */
   async listCompanies(params?: {
     limit?: number;
     offset?: number;
     industry?: string;
+    user_id?: string;
   }): Promise<CompanyListResponse> {
     const queryParams = new URLSearchParams();
 
     if (params?.limit) queryParams.set('limit', params.limit.toString());
     if (params?.offset) queryParams.set('offset', params.offset.toString());
     if (params?.industry) queryParams.set('industry', params.industry);
+    if (params?.user_id) queryParams.set('user_id', params.user_id);
 
     const query = queryParams.toString();
     const endpoint = query ? `/companies/?${query}` : '/companies/';

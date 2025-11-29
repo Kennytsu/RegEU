@@ -26,6 +26,9 @@ class CompanyProfile(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+    # User Association
+    user_id: Optional[UUID] = None
+
     # Basic Information
     company_name: str
     website_url: Optional[str] = None
@@ -76,6 +79,7 @@ class CompanyProfileCreate(BaseModel):
     company_name: str
     website_url: Optional[str] = None
     wikipedia_url: Optional[str] = None
+    user_id: UUID  # Required when creating a profile
 
 
 class CompanyScrapeRequest(BaseModel):
@@ -111,3 +115,9 @@ class CompanyProfileSimpleListResponse(BaseModel):
     success: bool
     data: list[CompanyProfileSimple]
     errors: Optional[list[dict]] = None
+
+
+class SaveProfilesRequest(BaseModel):
+    """Request model for saving company profiles"""
+    profiles: list[CompanyProfileSimple]
+    user_id: str

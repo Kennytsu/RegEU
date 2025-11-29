@@ -18,6 +18,7 @@ from app.models.company_profile import (
     CompanyProfileListResponse,
     CompanyProfileSimple,
     CompanyProfileSimpleListResponse,
+    SaveProfilesRequest,
 )
 
 # Only import supabase if configured (not needed for scraping-only mode)
@@ -99,13 +100,13 @@ async def scrape_companies(request: CompanyScrapeRequest):
 
 
 @router.post("/profiles/save", response_model=CompanyProfileSimpleListResponse)
-async def save_company_profiles(profiles: list[CompanyProfileSimple]):
+async def save_company_profiles(request: SaveProfilesRequest):
     """
     Save reviewed company profiles to database
     (Called after user reviews and confirms topics)
 
     Args:
-        profiles: List of company profiles with user-confirmed topics
+        request: SaveProfilesRequest containing profiles and user_id
 
     Returns:
         CompanyProfileSimpleListResponse with saved profiles
@@ -117,15 +118,16 @@ async def save_company_profiles(profiles: list[CompanyProfileSimple]):
         )
 
     try:
-        logger.info(f"Saving {len(profiles)} company profiles to database")
+        logger.info(f"Saving {len(request.profiles)} company profiles to database for user {request.user_id}")
 
         saved_profiles = []
         errors = []
 
-        for profile in profiles:
+        for profile in request.profiles:
             try:
                 # Prepare data for Supabase
                 profile_data = {
+                    "user_id": request.user_id,
                     "company_name": profile.company_name,
                     "website_url": profile.website_url,
                     "description": profile.description,
@@ -229,11 +231,40 @@ async def get_company_profile(company_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/user/{user_id}/has-profiles")
+async def check_user_has_profiles(user_id: str):
+    """
+    Check if a user has any company profiles
+
+    Args:
+        user_id: User ID to check
+
+    Returns:
+        Boolean indicating if user has profiles
+    """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
+
+    try:
+        result = supabase.table("company_profile").select("id").eq("user_id", user_id).limit(1).execute()
+
+        return {
+            "success": True,
+            "has_profiles": len(result.data) > 0,
+            "count": len(result.data)
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking user profiles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/", response_model=dict)
 async def list_companies(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    industry: Optional[str] = None
+    industry: Optional[str] = None,
+    user_id: Optional[str] = None
 ):
     """
     List all company profiles with optional filtering
@@ -242,6 +273,7 @@ async def list_companies(
         limit: Maximum number of results
         offset: Offset for pagination
         industry: Filter by industry
+        user_id: Filter by user ID
 
     Returns:
         List of company profiles
@@ -250,10 +282,13 @@ async def list_companies(
         raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
 
     try:
-        query = supabase.table("company_profiles").select("*")
+        query = supabase.table("company_profile").select("*")
 
         if industry:
             query = query.eq("industry", industry)
+
+        if user_id:
+            query = query.eq("user_id", user_id)
 
         result = query.range(offset, offset + limit - 1).order("created_at", desc=True).execute()
 

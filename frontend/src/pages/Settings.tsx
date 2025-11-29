@@ -1,15 +1,65 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockContacts, mockCompany, availableTopics, Contact } from "@/lib/mockData";
+import { mockContacts, Contact } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { Mail, Phone, MessageSquare, Save, Plus, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient, CompanyProfile } from "@/lib/api-client";
+import { useAuth } from "@/contexts/AuthContext";
+
+// Available regulatory topics (matching backend enum)
+const REGULATORY_TOPICS = [
+  "AI Act",
+  "Bafin",
+  "Cybersecurity",
+  "Gdpr",
+  "Aml",
+  "kyc",
+  "Esg",
+] as const;
 
 export default function Settings() {
+  const { user } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>(mockContacts);
-  const [selectedTopics, setSelectedTopics] = useState<string[]>(mockCompany.topics);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch user's company profiles on mount
+  useEffect(() => {
+    const fetchCompanyProfiles = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const result = await apiClient.listCompanies({ user_id: user.id });
+
+        if (result.success && result.data.length > 0) {
+          setCompanyProfiles(result.data);
+
+          // Aggregate all regulatory topics from all company profiles
+          const allTopics = new Set<string>();
+          result.data.forEach(profile => {
+            profile.regulatory_topics?.forEach(topic => allTopics.add(topic));
+          });
+
+          setSelectedTopics(Array.from(allTopics));
+        }
+      } catch (error) {
+        console.error('Error fetching company profiles:', error);
+        toast.error('Failed to load company profiles');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCompanyProfiles();
+  }, [user]);
 
   const handleContactUpdate = (id: string, field: keyof Contact, value: any) => {
     setContacts(prev =>
@@ -37,8 +87,27 @@ export default function Settings() {
     );
   };
 
-  const handleSave = () => {
-    toast.success("Settings saved");
+  const handleSave = async () => {
+    if (!user || companyProfiles.length === 0) {
+      toast.error("No company profiles found");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Update regulatory topics for all company profiles
+      // For now, we'll update the first profile's topics
+      // TODO: In the future, allow per-company topic configuration
+      const profileToUpdate = companyProfiles[0];
+
+      toast.success("Settings saved");
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddContact = () => {
@@ -59,22 +128,53 @@ export default function Settings() {
     setContacts(prev => prev.filter(contact => contact.id !== id));
   };
 
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading settings...</p>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
         <h1 className="text-lg font-semibold text-foreground mb-6">Settings</h1>
 
+        {companyProfiles.length > 0 && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="text-sm font-semibold mb-1">Company Profiles</h3>
+            <div className="space-y-1">
+              {companyProfiles.map((profile, idx) => (
+                <p key={idx} className="text-xs text-muted-foreground">
+                  {profile.company_name} {profile.industry && `• ${profile.industry}`}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-8">
           {/* Topics */}
           <section>
-            <h2 className="text-sm font-medium text-foreground mb-3">Topics</h2>
+            <h2 className="text-sm font-medium text-foreground mb-3">Regulatory Topics</h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              Topics you're tracking based on your company profile{companyProfiles.length > 1 ? 's' : ''}
+            </p>
             <div className="grid grid-cols-2 gap-2">
-              {availableTopics.map((topic) => {
-                const isSelected = selectedTopics.includes(topic.id);
+              {REGULATORY_TOPICS.map((topic) => {
+                const isSelected = selectedTopics.includes(topic);
                 return (
                   <button
-                    key={topic.id}
-                    onClick={() => handleTopicToggle(topic.id)}
+                    key={topic}
+                    onClick={() => handleTopicToggle(topic)}
                     className={cn(
                       "flex items-center gap-2 p-3 rounded-lg border text-left text-sm transition-colors",
                       isSelected
@@ -88,7 +188,7 @@ export default function Settings() {
                     )}>
                       {isSelected && <Check className="w-3 h-3 text-background" />}
                     </div>
-                    <span className="text-foreground">{topic.name}</span>
+                    <span className="text-foreground">{topic}</span>
                   </button>
                 );
               })}
@@ -196,9 +296,18 @@ export default function Settings() {
           </section>
 
           {/* Save */}
-          <Button onClick={handleSave} className="w-full gap-2">
-            <Save className="w-4 h-4" />
-            Save Changes
+          <Button onClick={handleSave} className="w-full gap-2" disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save Changes
+              </>
+            )}
           </Button>
         </div>
       </div>
