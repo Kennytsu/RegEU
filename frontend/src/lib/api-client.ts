@@ -15,9 +15,23 @@ export interface CompanyScrapeRequest {
   urls: string[];
 }
 
+export interface CompanyProfileSimple {
+  company_name: string;
+  description?: string;
+  industry?: string;
+  regulatory_topics?: string[];
+  website_url?: string;
+}
+
 export interface CompanyProfileListResponse {
   success: boolean;
   data: CompanyProfile[];
+  errors?: Array<{ url: string; error: string }>;
+}
+
+export interface CompanyProfileSimpleListResponse {
+  success: boolean;
+  data: CompanyProfileSimple[];
   errors?: Array<{ url: string; error: string }>;
 }
 
@@ -119,12 +133,22 @@ class ApiClient {
   }
 
   /**
-   * Scrape multiple companies from an array of URLs
+   * Scrape multiple companies from an array of URLs (does NOT save to database)
    */
-  async scrapeCompanies(request: CompanyScrapeRequest): Promise<CompanyProfileListResponse> {
-    return this.request<CompanyProfileListResponse>('/companies/scrape', {
+  async scrapeCompanies(request: CompanyScrapeRequest): Promise<CompanyProfileSimpleListResponse> {
+    return this.request<CompanyProfileSimpleListResponse>('/companies/scrape', {
       method: 'POST',
       body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Save reviewed company profiles to database
+   */
+  async saveCompanyProfiles(profiles: CompanyProfileSimple[]): Promise<CompanyProfileSimpleListResponse> {
+    return this.request<CompanyProfileSimpleListResponse>('/companies/profiles/save', {
+      method: 'POST',
+      body: JSON.stringify(profiles),
     });
   }
 

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from openai import OpenAI
 
 # Playwright is optional - only needed for _scrape_website() method
 try:
@@ -17,9 +18,11 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     async_playwright = None
 
+from app.core.config import Settings
 from app.models.company_profile import CompanyProfile, RegulatoryTopic
 
 logger = logging.getLogger(__name__)
+settings = Settings()
 
 
 class CompanyScraper:
@@ -283,8 +286,101 @@ class CompanyScraper:
 
     def _infer_regulatory_topics(self, data: dict) -> list[str]:
         """
-        Infer relevant regulatory topics based on company information
+        Infer relevant regulatory topics using GPT based on company information
         Maps to predefined RegulatoryTopic enum values
+
+        Args:
+            data: Company data dictionary
+
+        Returns:
+            List of relevant regulatory topics from the enum
+        """
+        # Get text to analyze
+        text_fields = [
+            f"Description: {data.get('description', '')}",
+            f"Industry: {data.get('industry', '')}",
+            f"Products/Services: {', '.join(data.get('products_services', []))}",
+            f"Technologies: {', '.join(data.get('technologies_used', []))}",
+            f"Keywords: {', '.join(data.get('keywords', []))}",
+        ]
+        company_info = '\n'.join([field for field in text_fields if field.split(': ')[1]])
+
+        if not company_info.strip():
+            logger.warning("No company information available for topic inference")
+            return None
+
+        # Available topics
+        available_topics = [topic.value for topic in RegulatoryTopic]
+        topics_str = ', '.join(available_topics)
+
+        # Use GPT to determine relevant topics
+        try:
+            api_key = settings.get_openai_api_key()
+            if not api_key:
+                logger.warning("OpenAI API key not configured, falling back to keyword matching")
+                return self._infer_regulatory_topics_fallback(data)
+
+            client = OpenAI(api_key=api_key)
+
+            prompt = f"""Based on the following company information, determine which EU regulatory topics are most relevant.
+
+Company Information:
+{company_info}
+
+Available regulatory topics:
+{topics_str}
+
+CRITICAL RULES (must follow):
+1. Financial services (banking, fintech, payments, trading, investment): MUST include Bafin, GDPR, AML, KYC
+2. GDPR applies to almost ALL companies - include it unless the company clearly does NOT handle any customer/user data
+3. AI/ML companies: MUST include AI Act, GDPR
+4. Any online service, platform, or SaaS: MUST include GDPR
+5. Sustainability/climate focus: include ESG
+6. Cybersecurity/security services: include Cybersecurity
+
+Instructions:
+- Return topics as a comma-separated list
+- Be inclusive - when in doubt, include the topic
+- GDPR should be included for 90%+ of companies
+
+Example responses:
+- Fintech: "Bafin, GDPR, AML, KYC"
+- AI startup: "AI Act, GDPR"
+- SaaS platform: "GDPR, Cybersecurity"
+- Bank: "Bafin, GDPR, AML, KYC"
+- Green tech: "ESG, GDPR"
+
+Response (comma-separated topics only):"""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert in EU regulations and compliance. You help identify which regulatory topics are relevant to different companies."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=100
+            )
+
+            result = response.choices[0].message.content.strip()
+
+            if result.lower() == "none":
+                return None
+
+            # Parse and validate the topics
+            suggested_topics = [topic.strip() for topic in result.split(',')]
+            valid_topics = [topic for topic in suggested_topics if topic in available_topics]
+
+            logger.info(f"GPT suggested topics: {valid_topics}")
+            return valid_topics if valid_topics else None
+
+        except Exception as e:
+            logger.error(f"Error using GPT for topic inference: {e}")
+            return self._infer_regulatory_topics_fallback(data)
+
+    def _infer_regulatory_topics_fallback(self, data: dict) -> list[str]:
+        """
+        Fallback keyword-based topic inference if GPT is unavailable
 
         Args:
             data: Company data dictionary

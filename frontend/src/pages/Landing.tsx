@@ -2,18 +2,84 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Shield, Zap, Bell, Bot } from "lucide-react";
+import { ArrowRight, Shield, Zap, Bell, Bot, CheckCircle2, XCircle } from "lucide-react";
 import euStars from "@/assets/eu-stars.png";
-import { apiClient, CompanyProfile } from "@/lib/api-client";
+import { apiClient, CompanyProfileSimple } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 import { BackendConnectionTest } from "@/components/BackendConnectionTest";
+
+// Available regulatory topics (matching backend enum)
+const REGULATORY_TOPICS = [
+  "AI Act",
+  "Bafin",
+  "Cybersecurity",
+  "Gdpr",
+  "Aml",
+  "kyc",
+  "Esg",
+] as const;
 
 export default function Landing() {
   const [urls, setUrls] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [scrapedData, setScrapedData] = useState<CompanyProfile[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [scrapedData, setScrapedData] = useState<CompanyProfileSimple[]>([]);
+  const [showReview, setShowReview] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const toggleTopic = (companyIndex: number, topic: string) => {
+    setScrapedData((prev) =>
+      prev.map((company, idx) => {
+        if (idx === companyIndex) {
+          const topics = company.regulatory_topics || [];
+          const newTopics = topics.includes(topic)
+            ? topics.filter((t) => t !== topic)
+            : [...topics, topic];
+          return { ...company, regulatory_topics: newTopics };
+        }
+        return company;
+      })
+    );
+  };
+
+  const handleSaveProfiles = async () => {
+    setIsSaving(true);
+
+    try {
+      toast({
+        title: "Saving profiles...",
+        description: `Creating ${scrapedData.length} company profile${scrapedData.length === 1 ? '' : 's'}`,
+      });
+
+      const result = await apiClient.saveCompanyProfiles(scrapedData);
+
+      if (result.success) {
+        toast({
+          title: "✅ Profiles Created!",
+          description: `Successfully saved ${result.data.length} company profile${result.data.length === 1 ? '' : 's'} to the database`,
+          duration: 5000,
+        });
+
+        // Navigate to dashboard after successful save
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Failed to save profiles:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
+      toast({
+        title: "❌ Failed to Save Profiles",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 7000,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +95,22 @@ export default function Landing() {
         .map((u) => u.trim())
         .filter(Boolean);
 
+      if (urlList.length === 0) {
+        toast({
+          title: "Error",
+          description: "Please enter at least one URL",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Show loading toast
+      toast({
+        title: "Analyzing companies...",
+        description: `Scraping ${urlList.length} compan${urlList.length === 1 ? 'y' : 'ies'}`,
+      });
+
       // Use the new batch scraping API
       const result = await apiClient.scrapeCompanies({
         urls: urlList,
@@ -36,29 +118,40 @@ export default function Landing() {
 
       if (result.success && result.data) {
         setScrapedData(result.data);
+        setShowReview(true);
 
+        // Show success notification
         toast({
-          title: "Success",
-          description: `Successfully scraped ${result.data.length} compan${result.data.length === 1 ? 'y' : 'ies'}`,
+          title: "✅ Analysis Complete!",
+          description: `Analyzed ${result.data.length} compan${result.data.length === 1 ? 'y' : 'ies'}. Please review and confirm topics.`,
+          duration: 5000,
         });
 
-        // Show errors if any
+        // Show individual errors if any
         if (result.errors && result.errors.length > 0) {
-          result.errors.forEach((err) => {
-            toast({
-              title: "Error",
-              description: `Failed to scrape ${err.url}: ${err.error}`,
-              variant: "destructive",
+          setTimeout(() => {
+            result.errors?.forEach((err, index) => {
+              setTimeout(() => {
+                toast({
+                  title: "❌ Scraping Failed",
+                  description: `${err.url}: ${err.error}`,
+                  variant: "destructive",
+                  duration: 5000,
+                });
+              }, index * 500); // Stagger error toasts
             });
-          });
+          }, 1000);
         }
       }
     } catch (error) {
       console.error("Scraping failed:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
       toast({
-        title: "Error",
-        description: "Failed to scrape companies",
+        title: "❌ Failed to Create Profiles",
+        description: errorMessage,
         variant: "destructive",
+        duration: 7000,
       });
     } finally {
       setIsLoading(false);
@@ -123,64 +216,144 @@ export default function Landing() {
                 value={urls}
                 onChange={(e) => setUrls(e.target.value)}
                 className="flex-1"
+                disabled={isLoading}
               />
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "..." : <ArrowRight className="w-4 h-4" />}
+              <Button type="submit" disabled={isLoading || !urls.trim()}>
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm">Analyzing...</span>
+                  </div>
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              We'll analyze your sites and suggest relevant regulations
+              We'll analyze your sites and create your company profile
             </p>
           </form>
 
-          {/* Scraped Results */}
-          {scrapedData.length > 0 && (
+          {/* Review Section */}
+          {showReview && scrapedData.length > 0 && (
             <div className="max-w-4xl mx-auto mb-16">
-              <h3 className="text-lg font-semibold mb-4">Analysis Results</h3>
-              <div className="space-y-4">
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">
+                  📋 Review Your Company Profiles
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  AI has suggested regulatory topics for your compan{scrapedData.length === 1 ? 'y' : 'ies'}.
+                  Click on topics below to add or remove them before saving.
+                </p>
+              </div>
+
+              <div className="space-y-6">
                 {scrapedData.map((data, idx) => (
-                  <div key={idx} className="p-4 border rounded-lg bg-card">
-                    <h4 className="font-semibold mb-2">{data.company_name}</h4>
-                    <div className="text-sm space-y-2">
-                      {data.regulatory_topics &&
-                        data.regulatory_topics.length > 0 && (
-                          <div>
-                            <span className="font-medium">
-                              Regulatory Topics:{" "}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {data.regulatory_topics.join(", ")}
-                            </span>
-                          </div>
-                        )}
-                      {data.industry && (
-                        <div>
-                          <span className="font-medium">Industry: </span>
-                          <span className="text-muted-foreground">
-                            {data.industry}
-                          </span>
-                        </div>
+                  <div
+                    key={idx}
+                    className="p-6 border rounded-lg bg-card shadow-sm"
+                  >
+                    <div className="mb-4">
+                      <h4 className="font-semibold text-lg mb-1">
+                        {data.company_name}
+                      </h4>
+                      {data.website_url && (
+                        <a
+                          href={data.website_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          {data.website_url}
+                        </a>
                       )}
-                      {data.technologies_used &&
-                        data.technologies_used.length > 0 && (
-                          <div>
-                            <span className="font-medium">Technologies: </span>
-                            <span className="text-muted-foreground">
-                              {data.technologies_used.join(", ")}
-                            </span>
-                          </div>
-                        )}
                     </div>
-                    <details className="mt-3">
-                      <summary className="text-xs text-muted-foreground cursor-pointer">
-                        View full JSON
-                      </summary>
-                      <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto">
-                        {JSON.stringify(data, null, 2)}
-                      </pre>
-                    </details>
+
+                    {data.description && (
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {data.description}
+                      </p>
+                    )}
+
+                    {data.industry && (
+                      <div className="mb-4 text-sm">
+                        <span className="font-medium">Industry: </span>
+                        <span className="text-muted-foreground">
+                          {data.industry}
+                        </span>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Regulatory Topics (click to toggle):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {REGULATORY_TOPICS.map((topic) => {
+                          const isSelected = data.regulatory_topics?.includes(topic);
+                          return (
+                            <button
+                              key={topic}
+                              onClick={() => toggleTopic(idx, topic)}
+                              className={`px-3 py-2 rounded-md border text-sm transition-all ${
+                                isSelected
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background hover:bg-accent border-border"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                    isSelected
+                                      ? "bg-white border-white"
+                                      : "border-muted-foreground"
+                                  }`}
+                                >
+                                  {isSelected && (
+                                    <CheckCircle2 className="w-3 h-3 text-primary" />
+                                  )}
+                                </div>
+                                <span>{topic}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowReview(false);
+                    setScrapedData([]);
+                    setUrls("");
+                  }}
+                  disabled={isSaving}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveProfiles}
+                  disabled={isSaving}
+                  className="flex-1 gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      Save & Continue
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           )}
