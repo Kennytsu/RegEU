@@ -8,9 +8,16 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
 
-from app.models.company_profile import CompanyProfile
+# Playwright is optional - only needed for _scrape_website() method
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    async_playwright = None
+
+from app.models.company_profile import CompanyProfile, RegulatoryTopic
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +70,7 @@ class CompanyScraper:
         # Scrape from company website if URL provided
         if website_url:
             try:
-                website_data = self._scrape_website(website_url)
+                website_data = self._scrape_website_simple(website_url)
                 # Merge website data with existing data
                 for key, value in website_data.items():
                     if value and not profile_data.get(key):
@@ -153,7 +160,62 @@ class CompanyScraper:
 
         return data
 
-    def _scrape_website(self, url: str) -> dict:
+    def _scrape_website_simple(self, url: str) -> dict:
+        """
+        Extract company information from company website using requests (simpler, no JS)
+
+        Args:
+            url: Company website URL
+
+        Returns:
+            Dictionary with extracted company data
+        """
+        logger.info(f"Scraping website (simple): {url}")
+
+        data = {}
+
+        try:
+            response = requests.get(url, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Extract meta description
+            meta_desc = soup.find('meta', attrs={'name': 'description'})
+            if meta_desc and meta_desc.get('content'):
+                data['description'] = meta_desc['content'][:1000]
+
+            # Extract from common sections
+            keywords = []
+
+            # Extract text from key sections
+            for section in soup.find_all(['section', 'div'], class_=re.compile(r'(about|company|products|services|technology)', re.I)):
+                text = section.get_text(strip=True)[:500]
+                # Extract potential keywords
+                words = re.findall(r'\b[A-Z][a-z]{3,}\b', text)
+                keywords.extend(words[:5])
+
+            if keywords:
+                data['keywords'] = list(set(keywords))[:20]
+
+            # Try to extract technologies
+            tech_keywords = ['AI', 'ML', 'Cloud', 'AWS', 'Azure', 'React', 'Python',
+                            'Kubernetes', 'Docker', 'API', 'SaaS', 'IoT', 'Blockchain']
+
+            page_text = soup.get_text()
+            found_tech = [tech for tech in tech_keywords if tech in page_text]
+            if found_tech:
+                data['technologies_used'] = found_tech
+
+            # Infer regulatory topics
+            data['regulatory_topics'] = self._infer_regulatory_topics(data)
+
+        except Exception as e:
+            logger.error(f"Error in simple website scraping: {e}")
+            raise
+
+        return data
+
+    async def _scrape_website(self, url: str) -> dict:
         """
         Extract company information from company website using Playwright
 
@@ -163,18 +225,24 @@ class CompanyScraper:
         Returns:
             Dictionary with extracted company data
         """
+        if not PLAYWRIGHT_AVAILABLE:
+            raise ImportError(
+                "Playwright is not installed. Install it with: "
+                "pip install playwright && playwright install"
+            )
+
         logger.info(f"Scraping website: {url}")
 
         data = {}
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
             try:
-                page = browser.new_page()
-                page.goto(url, timeout=self.timeout, wait_until='networkidle')
+                page = await browser.new_page()
+                await page.goto(url, timeout=self.timeout, wait_until='networkidle')
 
                 # Get page content
-                content = page.content()
+                content = await page.content()
                 soup = BeautifulSoup(content, 'html.parser')
 
                 # Extract meta description
@@ -209,19 +277,20 @@ class CompanyScraper:
                 data['regulatory_topics'] = self._infer_regulatory_topics(data)
 
             finally:
-                browser.close()
+                await browser.close()
 
         return data
 
     def _infer_regulatory_topics(self, data: dict) -> list[str]:
         """
         Infer relevant regulatory topics based on company information
+        Maps to predefined RegulatoryTopic enum values
 
         Args:
             data: Company data dictionary
 
         Returns:
-            List of relevant regulatory topics
+            List of relevant regulatory topics from the enum
         """
         topics = set()
 
@@ -235,22 +304,19 @@ class CompanyScraper:
         ]
         combined_text = ' '.join(text_fields).lower()
 
-        # Define regulatory topic mappings
+        # Define regulatory topic mappings to enum values
         topic_mappings = {
-            'data protection': ['data', 'privacy', 'gdpr', 'personal', 'information'],
-            'ai regulation': ['ai', 'artificial intelligence', 'machine learning', 'ml', 'algorithm'],
-            'digital services': ['digital', 'online', 'platform', 'marketplace', 'e-commerce'],
-            'cybersecurity': ['security', 'cyber', 'encryption', 'authentication'],
-            'financial services': ['finance', 'banking', 'payment', 'fintech', 'financial'],
-            'healthcare': ['health', 'medical', 'pharmaceutical', 'clinical', 'patient'],
-            'environmental': ['environmental', 'climate', 'sustainability', 'green', 'carbon'],
-            'telecommunications': ['telecom', 'network', '5g', 'communication', 'broadband'],
-            'transportation': ['transport', 'logistics', 'automotive', 'mobility', 'vehicle'],
-            'energy': ['energy', 'electricity', 'power', 'renewable', 'grid'],
+            RegulatoryTopic.AI_ACT: ['ai', 'artificial intelligence', 'machine learning', 'ml', 'algorithm', 'neural', 'deep learning'],
+            RegulatoryTopic.GDPR: ['data', 'privacy', 'gdpr', 'personal', 'information', 'data protection', 'consent'],
+            RegulatoryTopic.CYBERSECURITY: ['security', 'cyber', 'encryption', 'authentication', 'firewall', 'threat', 'vulnerability'],
+            RegulatoryTopic.BAFIN: ['finance', 'banking', 'payment', 'fintech', 'financial', 'investment', 'trading', 'broker'],
+            RegulatoryTopic.AML: ['anti-money laundering', 'aml', 'money laundering', 'financial crime', 'compliance', 'transaction monitoring'],
+            RegulatoryTopic.KYC: ['kyc', 'know your customer', 'identity verification', 'customer verification', 'onboarding', 'due diligence'],
+            RegulatoryTopic.ESG: ['environmental', 'social', 'governance', 'esg', 'sustainability', 'climate', 'green', 'carbon', 'renewable'],
         }
 
-        for topic, keywords in topic_mappings.items():
+        for topic_enum, keywords in topic_mappings.items():
             if any(keyword in combined_text for keyword in keywords):
-                topics.add(topic)
+                topics.add(topic_enum.value)
 
         return list(topics) if topics else None

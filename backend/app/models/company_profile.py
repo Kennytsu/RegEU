@@ -2,10 +2,22 @@
 Pydantic models for company profiles
 """
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, HttpUrl
+
+
+class RegulatoryTopic(str, Enum):
+    """Enum for regulatory topics matching the database"""
+    AI_ACT = "AI Act"
+    BAFIN = "Bafin"
+    CYBERSECURITY = "Cybersecurity"
+    GDPR = "Gdpr"
+    AML = "Aml"
+    KYC = "kyc"
+    ESG = "Esg"
 
 
 class CompanyProfile(BaseModel):
@@ -66,8 +78,20 @@ class CompanyProfileCreate(BaseModel):
     wikipedia_url: Optional[str] = None
 
 
+class CompanyScrapeRequest(BaseModel):
+    """Request model for scraping multiple URLs"""
+    urls: list[str]
+
+
 class CompanyProfileResponse(BaseModel):
     """Response model for company profile"""
     success: bool
     data: Optional[CompanyProfile] = None
     error: Optional[str] = None
+
+
+class CompanyProfileListResponse(BaseModel):
+    """Response model for multiple company profiles"""
+    success: bool
+    data: list[CompanyProfile]
+    errors: Optional[list[dict]] = None

@@ -29,38 +29,30 @@ export default function Landing() {
         .map((u) => u.trim())
         .filter(Boolean);
 
-      const results: CompanyProfile[] = [];
-      for (const url of urlList) {
-        try {
-          // Extract company name from URL (simple approach)
-          const companyName = new URL(url).hostname
-            .replace("www.", "")
-            .split(".")[0];
+      // Use the new batch scraping API
+      const result = await apiClient.scrapeCompanies({
+        urls: urlList,
+      });
 
-          const result = await apiClient.scrapeCompany({
-            company_name: companyName,
-            website_url: url,
-          });
+      if (result.success && result.data) {
+        setScrapedData(result.data);
 
-          if (result.success && result.data) {
-            results.push(result.data);
-          }
+        toast({
+          title: "Success",
+          description: `Successfully scraped ${result.data.length} compan${result.data.length === 1 ? 'y' : 'ies'}`,
+        });
 
-          toast({
-            title: "Success",
-            description: `Scraped ${companyName} successfully`,
-          });
-        } catch (error) {
-          console.error(`Failed to scrape ${url}:`, error);
-          toast({
-            title: "Error",
-            description: `Failed to scrape ${url}`,
-            variant: "destructive",
+        // Show errors if any
+        if (result.errors && result.errors.length > 0) {
+          result.errors.forEach((err) => {
+            toast({
+              title: "Error",
+              description: `Failed to scrape ${err.url}: ${err.error}`,
+              variant: "destructive",
+            });
           });
         }
       }
-
-      setScrapedData(results);
     } catch (error) {
       console.error("Scraping failed:", error);
       toast({

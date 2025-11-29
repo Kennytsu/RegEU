@@ -14,6 +14,8 @@ from app.models.company_profile import (
     CompanyProfile,
     CompanyProfileCreate,
     CompanyProfileResponse,
+    CompanyScrapeRequest,
+    CompanyProfileListResponse,
 )
 
 # Only import supabase if configured (not needed for scraping-only mode)
@@ -29,7 +31,66 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.post("/scrape", response_model=CompanyProfileResponse)
+@router.post("/scrape", response_model=CompanyProfileListResponse)
+async def scrape_companies(request: CompanyScrapeRequest):
+    """
+    Scrape company information from an array of URLs
+    (Does not store in database)
+
+    Args:
+        request: List of URLs to scrape
+
+    Returns:
+        CompanyProfileListResponse with scraped data as JSON
+    """
+    try:
+        logger.info(f"Received request: {request}")
+        logger.info(f"Scraping {len(request.urls)} URLs")
+
+        # Initialize scraper
+        scraper = CompanyScraper()
+
+        profiles = []
+        errors = []
+
+        for url in request.urls:
+            try:
+                # Extract company name from URL (domain name)
+                from urllib.parse import urlparse
+                parsed_url = urlparse(url)
+                company_name = parsed_url.netloc.replace('www.', '').split('.')[0]
+
+                # Scrape company information
+                profile = scraper.scrape_company(
+                    company_name=company_name,
+                    website_url=url,
+                    wikipedia_url=None
+                )
+
+                # Add timestamp
+                profile.last_scraped_at = datetime.utcnow()
+                profiles.append(profile)
+
+                logger.info(f"Successfully scraped: {url}")
+
+            except Exception as e:
+                error_msg = f"Error scraping {url}: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                errors.append({"url": url, "error": str(e)})
+
+        logger.info(f"Completed scraping. Success: {len(profiles)}, Errors: {len(errors)}")
+        return CompanyProfileListResponse(
+            success=True,
+            data=profiles,
+            errors=errors if errors else None
+        )
+
+    except Exception as e:
+        logger.error(f"Error in batch scraping: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/scrape/single", response_model=CompanyProfileResponse)
 async def scrape_company(request: CompanyProfileCreate):
     """
     Scrape company information from website and/or Wikipedia and return JSON
@@ -47,7 +108,7 @@ async def scrape_company(request: CompanyProfileCreate):
         # Initialize scraper
         scraper = CompanyScraper()
 
-        # Scrape company information
+        # Scrape company information (sync for now)
         profile = scraper.scrape_company(
             company_name=request.company_name,
             website_url=request.website_url,

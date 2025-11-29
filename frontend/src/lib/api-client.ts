@@ -11,6 +11,16 @@ export interface CompanyProfileRequest {
   wikipedia_url?: string;
 }
 
+export interface CompanyScrapeRequest {
+  urls: string[];
+}
+
+export interface CompanyProfileListResponse {
+  success: boolean;
+  data: CompanyProfile[];
+  errors?: Array<{ url: string; error: string }>;
+}
+
 export interface CompanyProfile {
   id?: string;
   created_at?: string;
@@ -109,10 +119,20 @@ class ApiClient {
   }
 
   /**
-   * Scrape company information and store in database
+   * Scrape multiple companies from an array of URLs
+   */
+  async scrapeCompanies(request: CompanyScrapeRequest): Promise<CompanyProfileListResponse> {
+    return this.request<CompanyProfileListResponse>('/companies/scrape', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Scrape single company information (legacy method)
    */
   async scrapeCompany(request: CompanyProfileRequest): Promise<CompanyProfileResponse> {
-    return this.request<CompanyProfileResponse>('/companies/scrape', {
+    return this.request<CompanyProfileResponse>('/companies/scrape/single', {
       method: 'POST',
       body: JSON.stringify(request),
     });
