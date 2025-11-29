@@ -16,6 +16,8 @@ from app.models.company_profile import (
     CompanyProfileResponse,
     CompanyScrapeRequest,
     CompanyProfileListResponse,
+    CompanyProfileSimple,
+    CompanyProfileSimpleListResponse,
 )
 
 # Only import supabase if configured (not needed for scraping-only mode)
@@ -31,17 +33,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.post("/scrape", response_model=CompanyProfileListResponse)
+@router.post("/scrape", response_model=CompanyProfileSimpleListResponse)
 async def scrape_companies(request: CompanyScrapeRequest):
     """
-    Scrape company information from an array of URLs
-    (Does not store in database)
+    Scrape company information from URLs (does NOT save to database yet)
+    Returns scraped data for user review
 
     Args:
         request: List of URLs to scrape
 
     Returns:
-        CompanyProfileListResponse with scraped data as JSON
+        CompanyProfileSimpleListResponse with simplified scraped data
     """
     try:
         logger.info(f"Received request: {request}")
@@ -67,9 +69,15 @@ async def scrape_companies(request: CompanyScrapeRequest):
                     wikipedia_url=None
                 )
 
-                # Add timestamp
-                profile.last_scraped_at = datetime.utcnow()
-                profiles.append(profile)
+                # Create simplified profile for response (NOT saved to DB yet)
+                simple_profile = CompanyProfileSimple(
+                    company_name=profile.company_name,
+                    description=profile.description,
+                    industry=profile.industry,
+                    regulatory_topics=profile.regulatory_topics,
+                    website_url=profile.website_url
+                )
+                profiles.append(simple_profile)
 
                 logger.info(f"Successfully scraped: {url}")
 
@@ -79,7 +87,7 @@ async def scrape_companies(request: CompanyScrapeRequest):
                 errors.append({"url": url, "error": str(e)})
 
         logger.info(f"Completed scraping. Success: {len(profiles)}, Errors: {len(errors)}")
-        return CompanyProfileListResponse(
+        return CompanyProfileSimpleListResponse(
             success=True,
             data=profiles,
             errors=errors if errors else None
@@ -87,6 +95,70 @@ async def scrape_companies(request: CompanyScrapeRequest):
 
     except Exception as e:
         logger.error(f"Error in batch scraping: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/profiles/save", response_model=CompanyProfileSimpleListResponse)
+async def save_company_profiles(profiles: list[CompanyProfileSimple]):
+    """
+    Save reviewed company profiles to database
+    (Called after user reviews and confirms topics)
+
+    Args:
+        profiles: List of company profiles with user-confirmed topics
+
+    Returns:
+        CompanyProfileSimpleListResponse with saved profiles
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not configured. This endpoint requires Supabase configuration."
+        )
+
+    try:
+        logger.info(f"Saving {len(profiles)} company profiles to database")
+
+        saved_profiles = []
+        errors = []
+
+        for profile in profiles:
+            try:
+                # Prepare data for Supabase
+                profile_data = {
+                    "company_name": profile.company_name,
+                    "website_url": profile.website_url,
+                    "description": profile.description,
+                    "industry": profile.industry,
+                    "regulatory_topics": profile.regulatory_topics or [],
+                    "scrape_status": "success",
+                    "last_scraped_at": datetime.utcnow().isoformat()
+                }
+
+                # Insert or update in Supabase
+                result = supabase.table("company_profile").upsert(
+                    profile_data,
+                    on_conflict="company_name"
+                ).execute()
+
+                saved_profiles.append(profile)
+                logger.info(f"Saved profile to Supabase: {profile.company_name}")
+
+            except Exception as db_error:
+                logger.error(f"Error saving profile {profile.company_name}: {db_error}")
+                errors.append({
+                    "url": profile.website_url or profile.company_name,
+                    "error": str(db_error)
+                })
+
+        return CompanyProfileSimpleListResponse(
+            success=True,
+            data=saved_profiles,
+            errors=errors if errors else None
+        )
+
+    except Exception as e:
+        logger.error(f"Error saving profiles: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

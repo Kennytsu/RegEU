@@ -90,8 +90,24 @@ class CompanyProfileResponse(BaseModel):
     error: Optional[str] = None
 
 
+class CompanyProfileSimple(BaseModel):
+    """Simplified company profile for API responses"""
+    company_name: str
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    regulatory_topics: Optional[list[str]] = None
+    website_url: Optional[str] = None
+
+
 class CompanyProfileListResponse(BaseModel):
     """Response model for multiple company profiles"""
     success: bool
     data: list[CompanyProfile]
+    errors: Optional[list[dict]] = None
+
+
+class CompanyProfileSimpleListResponse(BaseModel):
+    """Simplified response model for multiple company profiles"""
+    success: bool
+    data: list[CompanyProfileSimple]
     errors: Optional[list[dict]] = None
