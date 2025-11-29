@@ -65,6 +65,10 @@ app.include_router(companies_router)
 from app.api.contacts import router as contacts_router
 app.include_router(contacts_router)
 
+# Always include voice calls router (uses in-memory storage)
+from app.api.voice_calls import router as voice_calls_router
+app.include_router(voice_calls_router)
+
 # Legislative files router requires Supabase
 if SUPABASE_CONFIGURED:
     from app.api.legislative_files import router as legislative_files_router

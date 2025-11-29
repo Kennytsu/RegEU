@@ -7,7 +7,8 @@ import {
   Settings,
   LogOut,
   Menu,
-  X
+  X,
+  Phone
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/board", label: "Board", icon: Columns3 },
   { href: "/chat", label: "Assistant", icon: MessageSquare },
+  { href: "/voice-call", label: "EUgene", icon: Phone },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -66,14 +68,20 @@ export function Navbar() {
           <div className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.href;
+              const isEugene = item.href === "/voice-call";
               return (
                 <Link key={item.href} to={item.href}>
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
                     size="sm"
-                    className="gap-2 text-muted-foreground hover:text-foreground"
+                    className={cn(
+                      "gap-2",
+                      isEugene
+                        ? "text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
                   >
-                    <item.icon className="w-4 h-4" />
+                    <item.icon className={cn("w-4 h-4", isEugene && "w-5 h-5")} />
                     {item.label}
                   </Button>
                 </Link>
@@ -114,6 +122,7 @@ export function Navbar() {
           <div className="px-4 py-3 space-y-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.href;
+              const isEugene = item.href === "/voice-call";
               return (
                 <Link
                   key={item.href}
@@ -122,10 +131,13 @@ export function Navbar() {
                 >
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
-                    className="w-full justify-start gap-2"
+                    className={cn(
+                      "w-full justify-start gap-2",
+                      isEugene && "text-blue-600 font-semibold bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                    )}
                     size="sm"
                   >
-                    <item.icon className="w-4 h-4" />
+                    <item.icon className={cn("w-4 h-4", isEugene && "w-5 h-5")} />
                     {item.label}
                   </Button>
                 </Link>

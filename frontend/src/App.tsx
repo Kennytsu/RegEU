@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Board from "./pages/Board";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
+import VoiceCall from "./pages/VoiceCall";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/voice-call" element={<VoiceCall />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

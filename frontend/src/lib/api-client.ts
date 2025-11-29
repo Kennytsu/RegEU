@@ -148,6 +148,40 @@ export interface NotificationContactListResponse {
   count: number;
 }
 
+export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface RegulatoryUpdatePayload {
+  user_id: string;
+  user_name: string;
+  company_name: string;
+  regulation_type: string;
+  regulation_title: string;
+  effective_date: string;
+  deadline: string;
+  summary: string;
+  action_required: string;
+  impact_level: ImpactLevel;
+  reference_url?: string;
+}
+
+export interface GenerateVoiceCallLinkRequest {
+  payload: RegulatoryUpdatePayload;
+  expires_in_minutes?: number;
+}
+
+export interface GenerateVoiceCallLinkResponse {
+  success: boolean;
+  token: string;
+  link: string;
+  expires_at: string;
+}
+
+export interface GetVoiceCallPayloadResponse {
+  success: boolean;
+  payload?: RegulatoryUpdatePayload;
+  error?: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -342,6 +376,32 @@ class ApiClient {
    */
   async deleteContact(contactId: string): Promise<{ success: boolean; message: string }> {
     return this.request(`/contacts/${encodeURIComponent(contactId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Generate a voice call link for regulatory update
+   */
+  async generateVoiceCallLink(request: GenerateVoiceCallLinkRequest): Promise<GenerateVoiceCallLinkResponse> {
+    return this.request<GenerateVoiceCallLinkResponse>('/voice-calls/generate-link', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Get voice call payload from token
+   */
+  async getVoiceCallPayload(token: string): Promise<GetVoiceCallPayloadResponse> {
+    return this.request<GetVoiceCallPayloadResponse>(`/voice-calls/payload/${encodeURIComponent(token)}`);
+  }
+
+  /**
+   * Invalidate a voice call token
+   */
+  async invalidateVoiceCallToken(token: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/voice-calls/token/${encodeURIComponent(token)}`, {
       method: 'DELETE',
     });
   }
