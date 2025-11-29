@@ -2,19 +2,28 @@
 API endpoints for company profile scraping and management
 """
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app.core.supabase_client import supabase
 from app.data_sources.scraper.company_scraper import CompanyScraper
 from app.models.company_profile import (
     CompanyProfile,
     CompanyProfileCreate,
     CompanyProfileResponse,
 )
+
+# Only import supabase if configured (not needed for scraping-only mode)
+SUPABASE_CONFIGURED = os.getenv("SUPABASE_PROJECT_URL", "").startswith("https://") and \
+                      not os.getenv("SUPABASE_PROJECT_URL", "").endswith("placeholder.supabase.co")
+
+if SUPABASE_CONFIGURED:
+    from app.core.supabase_client import supabase
+else:
+    supabase = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -68,6 +77,9 @@ async def get_company_profile(company_name: str):
     Returns:
         CompanyProfileResponse with company data
     """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
+
     try:
         result = supabase.table("company_profiles").select("*").eq("company_name", company_name).execute()
 
@@ -101,6 +113,9 @@ async def list_companies(
     Returns:
         List of company profiles
     """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
+
     try:
         query = supabase.table("company_profiles").select("*")
 
@@ -131,6 +146,9 @@ async def delete_company_profile(company_name: str):
     Returns:
         Success message
     """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
+
     try:
         result = supabase.table("company_profiles").delete().eq("company_name", company_name).execute()
 
@@ -157,6 +175,9 @@ async def get_company_regulatory_topics(company_name: str):
     Returns:
         List of regulatory topics and relevant legislative areas
     """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not configured. This endpoint requires Supabase configuration.")
+
     try:
         result = supabase.table("company_profiles").select(
             "company_name, regulatory_topics, relevant_legislative_areas"
