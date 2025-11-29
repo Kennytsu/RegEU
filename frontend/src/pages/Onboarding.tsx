@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +24,41 @@ export default function Onboarding() {
   const [isSaving, setIsSaving] = useState(false);
   const [scrapedData, setScrapedData] = useState<CompanyProfileSimple[]>([]);
   const [showReview, setShowReview] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Check if user already has profiles on mount
+  useEffect(() => {
+    const checkExistingProfiles = async () => {
+      if (!user) {
+        setCheckingProfile(false);
+        return;
+      }
+
+      try {
+        const profileCheck = await apiClient.checkUserHasProfiles(user.id);
+
+        if (profileCheck.has_profiles) {
+          // User already has profiles, redirect to dashboard
+          toast({
+            title: "Profile already exists",
+            description: "Redirecting to dashboard...",
+          });
+          navigate('/dashboard');
+        } else {
+          setCheckingProfile(false);
+        }
+      } catch (error) {
+        console.error('Error checking profiles:', error);
+        // On error, allow them to continue with onboarding
+        setCheckingProfile(false);
+      }
+    };
+
+    checkExistingProfiles();
+  }, [user, navigate, toast]);
 
   const toggleTopic = (companyIndex: number, topic: string) => {
     setScrapedData((prev) =>
@@ -166,6 +198,18 @@ export default function Onboarding() {
       setIsLoading(false);
     }
   };
+
+  // Show loading state while checking profile
+  if (checkingProfile) {
+    return (
+      <div className="min-h-screen py-12 px-6 bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Checking your profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-12 px-6 bg-background">

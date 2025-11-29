@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { apiClient } from '@/lib/api-client'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -19,16 +20,31 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const { error } = await signIn(email, password)
+      const { data: authData, error } = await signIn(email, password)
 
       if (error) {
         toast.error('Login failed', {
           description: error.message
         })
-      } else {
+      } else if (authData?.user) {
         toast.success('Login successful')
-        // Redirect to onboarding for company profile creation
-        navigate('/onboarding')
+
+        // Check if user already has company profiles
+        try {
+          const profileCheck = await apiClient.checkUserHasProfiles(authData.user.id)
+
+          if (profileCheck.has_profiles) {
+            // User has profiles, go to dashboard
+            navigate('/dashboard')
+          } else {
+            // User has no profiles, go to onboarding
+            navigate('/onboarding')
+          }
+        } catch (profileError) {
+          console.error('Error checking profiles:', profileError)
+          // On error, default to onboarding
+          navigate('/onboarding')
+        }
       }
     } catch (error) {
       toast.error('An unexpected error occurred')
