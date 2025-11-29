@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException, Query, Request
+import multiprocessing
+from fastapi import APIRouter, HTTPException, Query, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Optional
 
@@ -17,6 +18,7 @@ from app.models.legislative_file import (
     LegislativeFileSuggestionResponse,
     LegislativeFileUniqueValuesResponse,
 )
+from app.data_sources.scraper.legislative_observatory_scraper import LegislativeObservatoryScraper
 
 
 logger = logging.getLogger(__name__)
@@ -283,4 +285,42 @@ def get_legislative_unique_values() -> LegislativeFileUniqueValuesResponse:
         )
     except Exception as e:
         logger.error("Something went wrong: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def run_legislation_scraper():
+    """Background task to run the legislation scraper"""
+    try:
+        logger.info("Starting legislative observatory scraper...")
+        stop_event = multiprocessing.Event()
+        scraper = LegislativeObservatoryScraper(stop_event=stop_event)
+        result = scraper.scrape()
+
+        if result.success:
+            logger.info(f"Scraping completed successfully. Lines added: {result.lines_added}")
+        else:
+            logger.error(f"Scraping failed with error: {result.error}")
+    except Exception as e:
+        logger.exception(f"Error running legislation scraper: {e}")
+
+
+@router.post("/legislative-files/trigger-scraper")
+def trigger_legislation_scraper(background_tasks: BackgroundTasks):
+    """
+    Trigger the legislative observatory scraper to run immediately.
+    The scraper will run in the background and scrape all legislative files.
+    """
+    try:
+        logger.info("Triggering legislative observatory scraper via API endpoint")
+        background_tasks.add_task(run_legislation_scraper)
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "message": "Legislative scraper triggered successfully",
+                "status": "running in background"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error triggering scraper: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e

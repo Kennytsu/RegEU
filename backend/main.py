@@ -4,6 +4,7 @@ from typing import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
@@ -36,10 +37,31 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Legislative Observatory Scraper API",
-    description="API for scraping legislative observatory data",
+    description="API for scraping legislative observatory data and company profiles",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",  # Frontend dev server
+        "http://localhost:3000",  # Alternative frontend port
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+if SUPABASE_CONFIGURED:
+    from app.api.companies import router as companies_router
+    from app.api.legislative_files import router as legislative_files_router
+    app.include_router(companies_router)
+    app.include_router(legislative_files_router)
 
 
 @app.get("/")
