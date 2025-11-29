@@ -1,9 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { RegulatoryCard } from "@/components/shared/RegulatoryCard";
 import { useLegislativeFiles, LegislativeFileItem } from "@/hooks/useMeetings";
 import { LegislativeDetailSheet } from "@/components/shared/LegislativeDetailSheet";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { 
+  Search, 
+  ArrowUpDown, 
+  Columns3, 
+  ToggleLeft 
+} from "lucide-react";
 
 // Define board columns based on legislative stages
 const columns = [
@@ -16,6 +39,8 @@ const columns = [
   { id: 'completed', label: 'Completed', statuses: ['Procedure completed', 'Procedure completed - delegated act enters into force', 'Procedure lapsed or withdrawn', 'Procedure rejected'] },
 ];
 
+type SortOption = 'title' | 'year' | 'lastpubdate' | 'committee';
+
 export default function Board() {
   const { data: legislativeItems = [], isLoading } = useLegislativeFiles(100);
   const [items, setItems] = useState<LegislativeFileItem[]>([]);
@@ -23,6 +48,14 @@ export default function Board() {
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<LegislativeFileItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Filter and sort states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>('lastpubdate');
+  const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(columns.map(c => c.id));
+  const [personalized, setPersonalized] = useState(false);
 
   useEffect(() => {
     if (legislativeItems.length > 0) {
@@ -30,8 +63,75 @@ export default function Board() {
     }
   }, [legislativeItems]);
 
+  // Extract unique committees and years from data
+  const { allCommittees, allYears } = useMemo(() => {
+    const committees = new Set<string>();
+    const years = new Set<string>();
+    
+    legislativeItems.forEach(item => {
+      if (item.committee) committees.add(item.committee);
+      if (item.date) {
+        const year = new Date(item.date).getFullYear().toString();
+        years.add(year);
+      }
+    });
+    
+    return {
+      allCommittees: Array.from(committees).sort(),
+      allYears: Array.from(years).sort((a, b) => parseInt(b) - parseInt(a))
+    };
+  }, [legislativeItems]);
+
+  // Filter and sort items
+  const filteredAndSortedItems = useMemo(() => {
+    let filtered = [...items];
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.title.toLowerCase().includes(query) ||
+        item.summary.toLowerCase().includes(query) ||
+        item.committee?.toLowerCase().includes(query)
+      );
+    }
+
+    // Committee filter
+    if (selectedCommittees.length > 0) {
+      filtered = filtered.filter(item => 
+        item.committee && selectedCommittees.includes(item.committee)
+      );
+    }
+
+    // Year filter
+    if (selectedYears.length > 0) {
+      filtered = filtered.filter(item => {
+        const year = new Date(item.date).getFullYear().toString();
+        return selectedYears.includes(year);
+      });
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'title':
+          return a.title.localeCompare(b.title);
+        case 'year':
+          return new Date(b.date).getFullYear() - new Date(a.date).getFullYear();
+        case 'lastpubdate':
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        case 'committee':
+          return (a.committee || '').localeCompare(b.committee || '');
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [items, searchQuery, selectedCommittees, selectedYears, sortBy]);
+
   const getColumnItems = (statuses: string[]) => 
-    items.filter(item => 
+    filteredAndSortedItems.filter(item => 
       item.legislativeStatus && statuses.some(s => 
         item.legislativeStatus?.toLowerCase().includes(s.toLowerCase()) ||
         s.toLowerCase().includes(item.legislativeStatus?.toLowerCase() || '')
@@ -61,12 +161,170 @@ export default function Board() {
     setDialogOpen(true);
   };
 
+  const toggleCommittee = (committee: string) => {
+    setSelectedCommittees(prev =>
+      prev.includes(committee)
+        ? prev.filter(c => c !== committee)
+        : [...prev, committee]
+    );
+  };
+
+  const toggleYear = (year: string) => {
+    setSelectedYears(prev =>
+      prev.includes(year)
+        ? prev.filter(y => y !== year)
+        : [...prev, year]
+    );
+  };
+
+  const toggleColumn = (columnId: string) => {
+    setVisibleColumns(prev =>
+      prev.includes(columnId)
+        ? prev.filter(id => id !== columnId)
+        : [...prev, columnId]
+    );
+  };
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col">
-        {/* Header */}
-        <div className="px-4 sm:px-6 py-4 border-b border-border">
+        {/* Header with Filters */}
+        <div className="px-4 sm:px-6 py-4 border-b border-border space-y-4">
           <h1 className="text-lg font-semibold text-foreground">Legislative Board</h1>
+          
+          {/* Filter Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[200px] max-w-[400px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search legislation..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 bg-background"
+              />
+            </div>
+
+            {/* Personalized Toggle */}
+            <Button
+              variant={personalized ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPersonalized(!personalized)}
+              className="h-9"
+            >
+              <ToggleLeft className="h-4 w-4 mr-2" />
+              Personalized
+            </Button>
+
+            {/* Sort Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Sort
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={sortBy === 'title'}
+                  onCheckedChange={() => setSortBy('title')}
+                >
+                  Title
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={sortBy === 'year'}
+                  onCheckedChange={() => setSortBy('year')}
+                >
+                  Year
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={sortBy === 'lastpubdate'}
+                  onCheckedChange={() => setSortBy('lastpubdate')}
+                >
+                  Last Publication Date
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={sortBy === 'committee'}
+                  onCheckedChange={() => setSortBy('committee')}
+                >
+                  Committee
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Columns Visibility */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <Columns3 className="h-4 w-4 mr-2" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {columns.map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    checked={visibleColumns.includes(column.id)}
+                    onCheckedChange={() => toggleColumn(column.id)}
+                  >
+                    {column.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Committee Filter */}
+            <Select
+              value={selectedCommittees.length > 0 ? selectedCommittees[0] : "all"}
+              onValueChange={(value) => {
+                if (value === "all") {
+                  setSelectedCommittees([]);
+                } else {
+                  setSelectedCommittees([value]);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="All Committees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Committees</SelectItem>
+                {allCommittees.map((committee) => (
+                  <SelectItem key={committee} value={committee}>
+                    {committee}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Year Filter */}
+            <Select
+              value={selectedYears.length > 0 ? selectedYears[0] : "all"}
+              onValueChange={(value) => {
+                if (value === "all") {
+                  setSelectedYears([]);
+                } else {
+                  setSelectedYears([value]);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[140px] h-9">
+                <SelectValue placeholder="All Years" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Years</SelectItem>
+                {allYears.map((year) => (
+                  <SelectItem key={year} value={year}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Board */}
@@ -77,60 +335,62 @@ export default function Board() {
             </div>
           ) : (
             <div className="flex gap-4 min-w-max h-full">
-              {columns.map((column) => {
-                const columnItems = getColumnItems(column.statuses);
-                const isOver = dragOverColumn === column.id;
+              {columns
+                .filter(column => visibleColumns.includes(column.id))
+                .map((column) => {
+                  const columnItems = getColumnItems(column.statuses);
+                  const isOver = dragOverColumn === column.id;
 
-                return (
-                  <div
-                    key={column.id}
-                    className="w-72 flex-shrink-0 flex flex-col"
-                    onDragOver={(e) => handleDragOver(e, column.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={() => handleDrop(column.id)}
-                  >
-                    {/* Column Header */}
-                    <div className="flex items-center justify-between mb-3 px-1">
-                      <h3 className="text-sm font-medium text-foreground">{column.label}</h3>
-                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        {columnItems.length}
-                      </span>
-                    </div>
-
-                    {/* Column Content */}
+                  return (
                     <div
-                      className={cn(
-                        "flex-1 p-2 rounded-lg transition-colors space-y-2 overflow-y-auto",
-                        isOver ? "bg-secondary" : "bg-muted/30"
-                      )}
+                      key={column.id}
+                      className="w-72 flex-shrink-0 flex flex-col"
+                      onDragOver={(e) => handleDragOver(e, column.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={() => handleDrop(column.id)}
                     >
-                      {columnItems.map((item) => (
-                        <div
-                          key={item.id}
-                          draggable
-                          onDragStart={() => handleDragStart(item)}
-                          className={cn(
-                            draggedItem?.id === item.id && "opacity-50"
-                          )}
-                        >
-                          <RegulatoryCard 
-                            item={item} 
-                            compact 
-                            draggable 
-                            onClick={() => handleCardClick(item)}
-                          />
-                        </div>
-                      ))}
+                      {/* Column Header */}
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <h3 className="text-sm font-medium text-foreground">{column.label}</h3>
+                        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                          {columnItems.length}
+                        </span>
+                      </div>
 
-                      {columnItems.length === 0 && (
-                        <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">
-                          No items
-                        </div>
-                      )}
+                      {/* Column Content */}
+                      <div
+                        className={cn(
+                          "flex-1 p-2 rounded-lg transition-colors space-y-2 overflow-y-auto",
+                          isOver ? "bg-secondary" : "bg-muted/30"
+                        )}
+                      >
+                        {columnItems.map((item) => (
+                          <div
+                            key={item.id}
+                            draggable
+                            onDragStart={() => handleDragStart(item)}
+                            className={cn(
+                              draggedItem?.id === item.id && "opacity-50"
+                            )}
+                          >
+                            <RegulatoryCard 
+                              item={item} 
+                              compact 
+                              draggable 
+                              onClick={() => handleCardClick(item)}
+                            />
+                          </div>
+                        ))}
+
+                        {columnItems.length === 0 && (
+                          <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">
+                            No items
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           )}
         </div>
