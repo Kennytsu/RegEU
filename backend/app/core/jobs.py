@@ -4,7 +4,7 @@ import multiprocessing
 import schedule
 
 from app.core.scheduling import scheduler
-from app.data_sources.scrapers.legislative_observatory_scraper import LegislativeObservatoryScraper
+from app.data_sources.scraper.legislative_observatory_scraper import LegislativeObservatoryScraper
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
