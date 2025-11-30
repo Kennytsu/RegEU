@@ -10,6 +10,59 @@ from app.core.supabase_client import supabase
 from app.data_sources.scraper_base import ScraperBase, ScraperResult
 from app.models.legislative_file import KeyPlayer, KeyEvent, Rapporteur, Reference, DocumentationGateway
 from app.core.mail.status_change import notify_status_change
+from app.services.llm_service.llm_client import LLMClient
+from app.services.llm_service.llm_models import LLMModels
+
+
+# ------------------------------
+# Topic Classification Function
+# ------------------------------
+def classify_topic(title: str, subjects: list[str] | None = None) -> str:
+    """
+    Classify the regulatory topic of a legislative document using OpenAI.
+
+    Args:
+        title: The title of the legislative document
+        subjects: Optional list of subjects from the document
+
+    Returns:
+        A comma-separated string of relevant topics from the predefined list
+    """
+    llm_client = LLMClient(LLMModels.openai_4o_mini)
+
+    subjects_text = ", ".join(subjects) if subjects else "None"
+
+    prompt = f"""Based on the following legislative document information, classify it into one or more relevant regulatory topics.
+
+Title: {title}
+Subjects: {subjects_text}
+
+Available topics:
+- AI Act
+- Bafin
+- Cybersecurity
+- GDPR
+- AML (Anti-Money Laundering)
+- KYC (Know Your Customer)
+- ESG (Environmental, Social, and Governance)
+- AMLR (Anti-Money Laundering Regulations)
+
+Instructions:
+- Return ONLY the relevant topic names as a comma-separated list
+- Use exact names from the list above
+- Return multiple topics if applicable
+- If no topics match, return "Other"
+
+Example output: "AI Act, GDPR, Cybersecurity"
+
+Classification:"""
+
+    try:
+        response = llm_client.generate_response(prompt, temperature=0.1)
+        return response.strip()
+    except Exception as e:
+        logging.error(f"Error classifying topic: {e}")
+        return "Other"
 
 
 # ------------------------------
@@ -29,6 +82,7 @@ class LegislativeObservatory(BaseModel):
     key_events: list[KeyEvent] | None = None
     documentation_gateway: list[DocumentationGateway] | None = None
     embedding_input: str | None = None
+    topics_en: str | None = None
 
 
 # ------------------------------
@@ -212,6 +266,9 @@ class LegislativeObservatorySpider(scrapy.Spider):
             main_entry.embedding_input = ""
 
         main_entry.embedding_input += " " + " ".join(s for s in embedding_additional if s)
+
+        # Classify topic using OpenAI
+        main_entry.topics_en = classify_topic(main_entry.title, main_entry.subjects)
 
         # Check for status change
         old_record = supabase.table("legislative_files").select("status, title").eq("id", main_entry.id).execute()
