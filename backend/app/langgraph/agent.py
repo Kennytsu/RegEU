@@ -102,10 +102,10 @@ def send_notifications(state: WorkflowState):
     classified = state["classified"]
     notifications = []
 
-    WEBHOOK_URL = "https://troyrivera.app.n8n.cloud/webhook-test/0b700423-d9d4-4788-82c6-1d89ec91c7c0"
+    WEBHOOK_URL = "https://troyrivera.app.n8n.cloud/webhook/0b700423-d9d4-4788-82c6-1d89ec91c7c0"
     
     for item in classified:
-        if item["severity"] == "medium":
+        if item["severity"] == "major":
             # Send notification via webhook
             payload = {
                 "severity": item["severity"],
@@ -116,12 +116,6 @@ def send_notifications(state: WorkflowState):
             print(f"Sending notification for {item['severity']} item: {item['title'][:60]}")
             notifications.append({"type": "urgent" if item["severity"] == "major" else "standard", "item": item})
             break
-        # if item["severity"] == "major":
-        #     print(f"MAJOR: {item['title'][:60]}")
-        #     notifications.append({"type": "urgent", "item": item})
-        # elif item["severity"] == "medium":
-        #     print(f"MEDIUM: {item['title'][:60]}")
-        #     notifications.append({"type": "standard", "item": item})
     
     print(f"{len(notifications)} notifications sent")
     return {"notifications": notifications}
