@@ -1,0 +1,29 @@
+{
+  "AWSEBDockerrunVersion": 2,
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "212284023746.dkr.ecr.us-east-1.amazonaws.com/eugene-backend:latest",
+      "essential": true,
+      "memory": 1024,
+      "portMappings": [
+        {
+          "hostPort": 8000,
+          "containerPort": 8000
+        }
+      ]
+    },
+    {
+      "name": "frontend",
+      "image": "212284023746.dkr.ecr.us-east-1.amazonaws.com/eugene-frontend:latest",
+      "essential": true,
+      "memory": 512,
+      "portMappings": [
+        {
+          "hostPort": 80,
+          "containerPort": 4173
+        }
+      ]
+    }
+  ]
+}
