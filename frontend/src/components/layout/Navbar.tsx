@@ -20,7 +20,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/board", label: "Board", icon: Columns3 },
   { href: "/chat", label: "Assistant", icon: MessageSquare },
-  { href: "/voice-call", label: "EUgene", icon: Phone },
+  // { href: "/voice-call", label: "EUgene", icon: Phone },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
